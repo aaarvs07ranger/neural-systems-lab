@@ -1,0 +1,15 @@
+# Pinned stack for Python 3.9 on macOS arm64 (Apple Silicon, MPS).
+# AI2-THOR itself is installed separately by setup.sh from the AllenAI
+# private index (ai2thor-pypi.allenai.org) at the ProcTHOR-pinned commit.
+numpy==1.26.4                 # torch 2.2.x requires numpy < 2
+opencv-python==4.10.0.84      # ai2thor dep; 5.x would force numpy 2.x back in
+torch==2.2.2                  # arm64 wheel with mature MPS support, py3.9-compatible
+gymnasium==0.29.1             # matches stable-baselines3 2.3.x requirement
+stable-baselines3==2.3.2      # last battle-tested line for py3.9 + gymnasium 0.29
+prior                          # ProcTHOR-10k dataset loader (allenai)
+pandas>=2.0,<2.3
+matplotlib>=3.7,<3.10
+tabulate>=0.9                  # pandas .to_markdown() backend
+tqdm>=4.66
+tensorboard>=2.14,<3           # DreamerV3 (vendored NM512) training-curve logging
+pyyaml>=6                      # loads vendored dreamerv3 configs.yaml defaults

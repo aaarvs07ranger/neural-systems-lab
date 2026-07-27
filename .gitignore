@@ -1,2 +1,15 @@
 CLAUDE.md
 claude_continuation_guide.txt
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.python-version
+
+# macOS
+.DS_Store
+
+# Heavy experiment outputs (tables/ and plots/ stay tracked)
+results/checkpoints/
+results/logs/
