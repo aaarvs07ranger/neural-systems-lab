@@ -5,6 +5,7 @@ and hyperparameters from this single module so experiments stay reproducible.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
@@ -14,7 +15,10 @@ from typing import Tuple
 # ---------------------------------------------------------------------------
 PROJECT_ROOT: Path = Path(__file__).resolve().parent
 DATA_DIR: Path = PROJECT_ROOT / "data"
-RESULTS_DIR: Path = PROJECT_ROOT / "results"
+# NSL_RESULTS_DIR redirects the whole results tree (checkpoints, logs, tables,
+# plots) — parallel slurm array tasks point it at per-seed dirs so their
+# checkpoint/replay accounting never collides. data/ stays shared.
+RESULTS_DIR: Path = Path(os.environ.get("NSL_RESULTS_DIR", str(PROJECT_ROOT / "results")))
 LOGS_DIR: Path = RESULTS_DIR / "logs"
 CHECKPOINTS_DIR: Path = RESULTS_DIR / "checkpoints"
 TABLES_DIR: Path = RESULTS_DIR / "tables"
@@ -35,13 +39,15 @@ def ensure_dirs() -> None:
 # Device selection (M4 MPS first, CPU fallback)
 # ---------------------------------------------------------------------------
 def get_device() -> str:
-    """Return 'mps' when Metal acceleration is available, else 'cpu'.
+    """Return the best available device: 'cuda' (cluster) > 'mps' (M4) > 'cpu'.
 
     Import of torch is deferred so that scripts which never touch torch
     (e.g. envs/generate_variants.py) can import this module cheaply.
     """
     import torch  # local import by design
 
+    if torch.cuda.is_available():
+        return "cuda"
     return "mps" if torch.backends.mps.is_available() else "cpu"
 
 

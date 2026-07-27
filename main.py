@@ -109,6 +109,12 @@ def main() -> None:
                         help="override training timesteps")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override eval episodes per variant")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="override the training seed (slurm seed sweeps; "
+                             "pair with NSL_RESULTS_DIR for isolated outputs)")
+    parser.add_argument("--train-ratio", type=int, default=None,
+                        help="override DreamerV3 train_ratio (e.g. 512 on "
+                             "cluster GPUs; ignored by baselines without it)")
     parser.add_argument("--smoke", action="store_true",
                         help="tiny end-to-end run to verify pipeline mechanics")
     parser.add_argument("--force-generate", action="store_true",
@@ -131,6 +137,12 @@ def main() -> None:
         overrides["total_timesteps"] = args.total_steps
     if args.episodes is not None:
         overrides["eval_episodes"] = args.episodes
+    if args.seed is not None:
+        overrides["seed"] = args.seed
+    if args.train_ratio is not None:
+        if not hasattr(cfg, "train_ratio"):
+            parser.error(f"--train-ratio does not apply to baseline '{args.baseline}'")
+        overrides["train_ratio"] = args.train_ratio
     if overrides:
         cfg = type(cfg)(**{**cfg.__dict__, **overrides})
 

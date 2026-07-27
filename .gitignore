@@ -13,3 +13,9 @@ __pycache__/
 # Heavy experiment outputs (tables/ and plots/ stay tracked)
 results/checkpoints/
 results/logs/
+
+# Cluster (Hyak/slurm) outputs (requirements.lock.hyak.txt stays tracked:
+# it is the Linux/CUDA half of the reproducibility appendix)
+slurm-*.out
+results_seed*/
+results_smoke*/

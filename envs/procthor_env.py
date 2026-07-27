@@ -28,6 +28,8 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -39,6 +41,32 @@ from gymnasium import spaces
 logger = logging.getLogger(__name__)
 
 Vec3 = Dict[str, float]
+
+
+def _resolve_thor_platform() -> Optional[Any]:
+    """Select the AI2-THOR rendering platform for this host.
+
+    ``NSL_THOR_PLATFORM`` values:
+      * ``cloudrendering`` — headless Vulkan Linux build (Hyak/slurm GPU nodes;
+        no X server or window required).
+      * ``default``        — ai2thor's native windowed build for the host OS.
+      * ``auto`` (unset)   — ``cloudrendering`` on display-less Linux,
+        ``default`` everywhere else (macOS keeps its Rosetta Unity window).
+    """
+    choice = os.environ.get("NSL_THOR_PLATFORM", "auto").strip().lower()
+    if choice == "auto":
+        headless_linux = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
+        choice = "cloudrendering" if headless_linux else "default"
+    if choice == "default":
+        return None  # Controller(platform=None) picks the windowed build
+    if choice == "cloudrendering":
+        from ai2thor.platform import CloudRendering  # deferred: heavy import
+
+        return CloudRendering
+    raise ValueError(
+        f"NSL_THOR_PLATFORM={choice!r} not recognized "
+        "(expected 'auto', 'default', or 'cloudrendering')"
+    )
 
 
 def _xz_distance(a: Vec3, b: Vec3) -> float:
@@ -122,9 +150,20 @@ class ProcTHORObjectNavEnv(gym.Env):
             return
         from ai2thor.controller import Controller  # deferred: heavy import
 
-        logger.info("[%s] booting AI2-THOR controller (first reset)...", self.name)
+        platform = _resolve_thor_platform()
+        platform_kwargs: Dict[str, Any] = {}
+        if platform is not None:
+            platform_kwargs["platform"] = platform
+            # slurm's cgroup exposes only the allocated GPU(s); render on the
+            # first one unless explicitly redirected.
+            platform_kwargs["gpu_device"] = int(os.environ.get("NSL_THOR_GPU", "0"))
+        logger.info(
+            "[%s] booting AI2-THOR controller (first reset, platform=%s)...",
+            self.name, platform.__name__ if platform is not None else "default",
+        )
         self._controller = Controller(
             scene=self._house,
+            **platform_kwargs,
             agentMode="default",
             gridSize=self._cfg.grid_size,
             # snapToGrid must be False for non-90-degree rotateStepDegrees;
