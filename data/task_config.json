@@ -1,0 +1,10 @@
+{
+  "dataset": "procthor-10k",
+  "dataset_revision": "ab3cacd0fc17754d4c080a3fd50b18395fae8647",
+  "split": "train",
+  "house_index": 0,
+  "target_object_type": "Fridge",
+  "variant_seed": 1337,
+  "house_a": "house_a.json",
+  "house_b": "house_b.json"
+}
