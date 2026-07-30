@@ -9,8 +9,8 @@
 # touched. Delete the dir after inspecting the output.
 #
 #SBATCH --job-name=nsl-smoke
-#SBATCH --account=rao            # verify with `hyakalloc`
-#SBATCH --partition=gpu-a40
+#SBATCH --account=rao            # verified via `hyakalloc` 2026-07-30
+#SBATCH --partition=gpu-rtx6k    # Rao group allocation: 4x RTX 6000, 20 CPUs, 188G
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

@@ -10,8 +10,8 @@
 # from results/checkpoints/<baseline>/latest.pt + the on-disk replay buffer.
 #
 #SBATCH --job-name=nsl-train
-#SBATCH --account=rao            # verify with `hyakalloc` (lists your accounts/partitions)
-#SBATCH --partition=gpu-a40      # group GPU partition; `ckpt` = preemptible spare capacity
+#SBATCH --account=rao            # verified via `hyakalloc` 2026-07-30
+#SBATCH --partition=gpu-rtx6k    # Rao group allocation: 4x RTX 6000; `ckpt` = preemptible spare capacity
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8        # the Unity sim is CPU-bound; don't starve it
