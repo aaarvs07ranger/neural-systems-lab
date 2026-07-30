@@ -1,0 +1,3 @@
+variant,success_rate,spl,mean_episode_length,mean_total_reward,episodes
+A (train visuals),0.88,0.6047854452959887,33.68,10.095764880755302,25
+B (zero-shot visuals),0.44,0.3431741332524183,115.52,4.092827379205216,25
