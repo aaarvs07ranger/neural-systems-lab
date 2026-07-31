@@ -1,6 +1,6 @@
 #!/bin/bash
 # GPU-node validation of the whole pipeline: CloudRendering boot, CUDA torch,
-# tiny train + paired A/B eval for both implemented baselines (~15-30 min).
+# tiny train + paired A/B eval for all implemented baselines (~15-30 min).
 # Run this once after setup_hyak.sh, before any full submission.
 #
 #   sbatch scripts/slurm/smoke.sbatch
@@ -37,4 +37,5 @@ python -c "import torch; assert torch.cuda.is_available(), 'no CUDA'; print('CUD
 
 python main.py --smoke --baseline ppo
 python main.py --smoke --baseline dreamerv3
-echo "[slurm] smoke PASSED for ppo + dreamerv3 (results in ${NSL_RESULTS_DIR})"
+python main.py --smoke --baseline tdmpc2
+echo "[slurm] smoke PASSED for ppo + dreamerv3 + tdmpc2 (results in ${NSL_RESULTS_DIR})"

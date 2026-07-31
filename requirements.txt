@@ -13,3 +13,5 @@ tabulate>=0.9                  # pandas .to_markdown() backend
 tqdm>=4.66
 tensorboard>=2.14,<3           # DreamerV3 (vendored NM512) training-curve logging
 pyyaml>=6                      # loads vendored dreamerv3 configs.yaml defaults
+tensordict==0.3.1              # TD-MPC2 replay buffer (last line for torch 2.2)
+torchrl==0.3.1                 # TD-MPC2 SliceSampler/LazyTensorStorage (torch 2.2-compatible)

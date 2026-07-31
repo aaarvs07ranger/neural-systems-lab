@@ -200,6 +200,20 @@ def load_frozen_model(baseline: str, cfg: Any) -> Any:
         adapter = DreamerV3Adapter(cfg)
         adapter.load(DV3_FINAL_MODEL_PATH)
         return adapter
+    if baseline == "tdmpc2":
+        from models.td_mpc2.adapter import (
+            FINAL_MODEL_PATH as TDM_FINAL_MODEL_PATH,
+            TDMPC2Adapter,
+        )
+
+        if not TDM_FINAL_MODEL_PATH.exists():
+            raise FileNotFoundError(
+                f"{TDM_FINAL_MODEL_PATH} not found — run "
+                "`python main.py --baseline tdmpc2 --stage train` first."
+            )
+        adapter = TDMPC2Adapter(cfg)
+        adapter.load(TDM_FINAL_MODEL_PATH)
+        return adapter
     raise NotImplementedError(f"no frozen-model loader for baseline '{baseline}'")
 
 
@@ -273,20 +287,27 @@ def run_transfer_eval(cfg: Any, baseline: str = "ppo") -> Dict[str, Any]:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline", choices=("ppo", "dreamerv3"), default="ppo")
+    parser.add_argument("--baseline", choices=("ppo", "dreamerv3", "tdmpc2"), default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")
     parser.add_argument("--smoke", action="store_true",
                         help="tiny run to verify pipeline mechanics")
     args = parser.parse_args()
 
-    from config import DreamerV3Config, SmokeDreamerV3Config
+    from config import (
+        DreamerV3Config,
+        SmokeDreamerV3Config,
+        SmokeTDMPC2Config,
+        TDMPC2Config,
+    )
 
     config_classes = {
         ("ppo", False): PPOConfig,
         ("ppo", True): SmokePPOConfig,
         ("dreamerv3", False): DreamerV3Config,
         ("dreamerv3", True): SmokeDreamerV3Config,
+        ("tdmpc2", False): TDMPC2Config,
+        ("tdmpc2", True): SmokeTDMPC2Config,
     }
     cfg = config_classes[(args.baseline, args.smoke)]()
     if args.episodes is not None:

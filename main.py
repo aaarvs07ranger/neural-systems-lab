@@ -39,13 +39,15 @@ from config import (  # noqa: E402
     PPOConfig,
     SmokeDreamerV3Config,
     SmokePPOConfig,
+    SmokeTDMPC2Config,
+    TDMPC2Config,
     ensure_dirs,
 )
 
 logger = logging.getLogger("main")
 
-IMPLEMENTED_BASELINES = ("ppo", "dreamerv3")
-PLANNED_BASELINES = ("tdmpc2",)
+IMPLEMENTED_BASELINES = ("ppo", "dreamerv3", "tdmpc2")
+PLANNED_BASELINES = ()
 
 # (baseline, smoke) -> config dataclass
 CONFIG_CLASSES = {
@@ -53,6 +55,8 @@ CONFIG_CLASSES = {
     ("ppo", True): SmokePPOConfig,
     ("dreamerv3", False): DreamerV3Config,
     ("dreamerv3", True): SmokeDreamerV3Config,
+    ("tdmpc2", False): TDMPC2Config,
+    ("tdmpc2", True): SmokeTDMPC2Config,
 }
 
 
@@ -76,6 +80,12 @@ def stage_train(baseline: str, cfg) -> None:
         from models.dreamer_v3.adapter import DreamerV3Adapter
 
         DreamerV3Adapter(cfg).train(
+            HOUSE_A_PATH, total_timesteps=cfg.total_timesteps, seed=cfg.seed
+        )
+    elif baseline == "tdmpc2":
+        from models.td_mpc2.adapter import TDMPC2Adapter
+
+        TDMPC2Adapter(cfg).train(
             HOUSE_A_PATH, total_timesteps=cfg.total_timesteps, seed=cfg.seed
         )
     else:
