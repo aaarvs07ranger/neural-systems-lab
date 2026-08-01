@@ -43,6 +43,16 @@ hyperparameter semantics) is untouched.**
 8. **`torch.compiler.cudagraph_mark_step_begin()`** guarded behind `cfg.compile` + hasattr.
 9. **`pi()` info container**: `tensordict.TensorDict({...})` → plain `dict` (used only for
    key lookups; TensorDict import removed from world_model).
+10. **Buffer capacity `min(buffer_size, steps)` → `min(buffer_size, 2*steps)`**
+    (`common/buffer.py`): capacity must bound *rows*, not env steps — each episode
+    stores len+1 rows, and once the policy solves the task episodes shrink to a few
+    steps, pushing rows/step toward 2. With upstream's bound the ring wraps mid-run,
+    partially overwriting stored episodes; the surviving fragments can be shorter than
+    horizon+1 and `SliceSampler(strict_length=True)` raises (observed at ~142k/150k
+    steps on klone after the agent reached ~100% train success). 2×steps is the exact
+    worst-case row bound (all length-1 episodes), so wraparound cannot occur within a
+    run. Upstream rarely hits this because fixed 500-step episodes add only ~0.2% extra
+    rows. Memory cost at our budget: ≤ 300k rows ≈ 11 GB CPU storage (nodes have 64G).
 
 ## Behavioral notes (documented, not patched)
 

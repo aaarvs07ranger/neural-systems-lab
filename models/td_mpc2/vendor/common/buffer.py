@@ -13,7 +13,13 @@ class Buffer():
 	def __init__(self, cfg):
 		self.cfg = cfg
 		self._device = torch.device(getattr(cfg, 'device', 'cuda:0'))
-		self._capacity = min(cfg.buffer_size, cfg.steps)
+		# Capacity must cover worst-case ROWS, not env steps: each episode
+		# stores len+1 rows (sentinel first row), and short solved-policy
+		# episodes push rows/step toward 2. Upstream's min(buffer, steps)
+		# wraps the ring mid-run, truncating stored episodes below the
+		# slice length -> SliceSampler(strict_length=True) raises. 2*steps
+		# is the exact worst-case bound (all length-1 episodes).
+		self._capacity = min(cfg.buffer_size, 2 * cfg.steps)
 		self._sampler = SliceSampler(
 			num_slices=self.cfg.batch_size,
 			end_key=None,
