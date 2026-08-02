@@ -1,5 +1,9 @@
+# Local-only agent/session context (never publish: lab notes, personal plans).
+# AGENTS.md is the current filename; CLAUDE.md kept for the pre-rename history.
+AGENTS.md
 CLAUDE.md
 claude_continuation_guide.txt
+vishwas.txt
 
 # Python
 __pycache__/
