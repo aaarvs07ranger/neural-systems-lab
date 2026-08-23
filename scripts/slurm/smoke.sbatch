@@ -36,6 +36,7 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 python -c "import torch; assert torch.cuda.is_available(), 'no CUDA'; print('CUDA OK:', torch.cuda.get_device_name(0))"
 
 python main.py --smoke --baseline ppo
+python main.py --smoke --baseline ppo_aug
 python main.py --smoke --baseline dreamerv3
 python main.py --smoke --baseline tdmpc2
-echo "[slurm] smoke PASSED for ppo + dreamerv3 + tdmpc2 (results in ${NSL_RESULTS_DIR})"
+echo "[slurm] smoke PASSED for ppo + ppo_aug + dreamerv3 + tdmpc2 (results in ${NSL_RESULTS_DIR})"

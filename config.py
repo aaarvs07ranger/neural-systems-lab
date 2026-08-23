@@ -93,6 +93,10 @@ class PPOConfig:
     max_episode_steps: int = 200
     eval_episodes: int = 25
     eval_seed_base: int = 10_000   # eval episode seeds start here (disjoint from training)
+    # Baseline identity: keys the checkpoint/log subdirs and result-table
+    # prefixes so ppo and ppo_aug artifacts never collide.
+    baseline_name: str = "ppo"
+    augment: bool = False          # train-time photometric jitter (see PPOAugConfig)
 
 
 # Tiny settings used by `--smoke` to verify the full pipeline mechanics quickly.
@@ -104,6 +108,38 @@ class SmokePPOConfig(PPOConfig):
     checkpoint_freq: int = 512
     max_episode_steps: int = 50
     eval_episodes: int = 3
+
+
+# ---------------------------------------------------------------------------
+# PPO + photometric augmentation — the "why not just augment?" column
+# (distinct architecture class: the only agent TOLD appearance is noise).
+# IDENTICAL budget/recipe/protocol to PPOConfig; the ONLY difference is
+# train-time color jitter, never applied at eval (envs/augmentation.py).
+# Strengths follow the standard 0.4/0.4/0.4/0.1 ColorJitter recipe
+# (SimCLR / RAD-style pixel-RL augmentation); hue 0.1 of a full cycle
+# = +/-36 degrees. Params resample once per episode (domain-randomization
+# convention — one consistent re-tinted look per episode).
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class PPOAugConfig(PPOConfig):
+    baseline_name: str = "ppo_aug"
+    augment: bool = True
+    aug_brightness: float = 0.4
+    aug_contrast: float = 0.4
+    aug_saturation: float = 0.4
+    aug_hue_degrees: float = 36.0
+    aug_resample: str = "episode"   # "episode" | "step"
+
+
+@dataclass(frozen=True)
+class SmokePPOAugConfig(SmokePPOConfig):
+    baseline_name: str = "ppo_aug"
+    augment: bool = True
+    aug_brightness: float = 0.4
+    aug_contrast: float = 0.4
+    aug_saturation: float = 0.4
+    aug_hue_degrees: float = 36.0
+    aug_resample: str = "episode"
 
 
 # ---------------------------------------------------------------------------

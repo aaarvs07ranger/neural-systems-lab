@@ -43,6 +43,10 @@ python main.py --smoke
 # full PPO transfer experiment (env generation -> train on A -> zero-shot eval on B)
 python main.py
 
+# PPO + train-time photometric augmentation (the "why not just augment?" baseline;
+# identical recipe/budget to ppo — only the training observations are jittered)
+python main.py --baseline ppo_aug
+
 # full DreamerV3 transfer experiment (same protocol, vendored NM512 world model)
 python main.py --baseline dreamerv3
 tensorboard --logdir results/logs/dreamerv3   # live training curves

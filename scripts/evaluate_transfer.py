@@ -27,12 +27,22 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict
 
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# Same guard as main.py: a --smoke eval must never overwrite the real
+# results/tables in place. Must precede the config import.
+if "--smoke" in sys.argv and "NSL_RESULTS_DIR" not in os.environ:
+    _smoke_results = Path(__file__).resolve().parents[1] / (
+        "results_smoke_local_" + time.strftime("%Y%m%d_%H%M%S")
+    )
+    os.environ["NSL_RESULTS_DIR"] = str(_smoke_results)
+    print(f"[smoke] results redirected to {_smoke_results} (gitignored)")
 
 from config import (  # noqa: E402
     HOUSE_A_PATH,
@@ -45,7 +55,7 @@ from config import (  # noqa: E402
     get_device,
 )
 from envs.procthor_env import ObjectNavConfig, make_objectnav_env  # noqa: E402
-from scripts.train_ppo import FINAL_MODEL_PATH, build_env_config  # noqa: E402
+from scripts.train_ppo import build_env_config, final_model_path  # noqa: E402
 
 logger = logging.getLogger("evaluate_transfer")
 
@@ -177,15 +187,18 @@ def plot_transfer(
 
 def load_frozen_model(baseline: str, cfg: Any) -> Any:
     """Load the trained model for `baseline` (weights frozen, ready to predict)."""
-    if baseline == "ppo":
+    if baseline in ("ppo", "ppo_aug"):
         from stable_baselines3 import PPO
 
-        model_zip = FINAL_MODEL_PATH.with_suffix(".zip")
+        # Eval envs are built raw in evaluate_on_house — train-time
+        # augmentation (ppo_aug) is never applied here by construction.
+        model_zip = final_model_path(baseline).with_suffix(".zip")
         if not model_zip.exists():
             raise FileNotFoundError(
-                f"{model_zip} not found — run scripts/train_ppo.py first."
+                f"{model_zip} not found — run `python main.py --baseline "
+                f"{baseline} --stage train` first."
             )
-        return PPO.load(str(FINAL_MODEL_PATH), device=get_device())
+        return PPO.load(str(final_model_path(baseline)), device=get_device())
     if baseline == "dreamerv3":
         from models.dreamer_v3.adapter import (
             FINAL_MODEL_PATH as DV3_FINAL_MODEL_PATH,
@@ -287,7 +300,8 @@ def run_transfer_eval(cfg: Any, baseline: str = "ppo") -> Dict[str, Any]:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline", choices=("ppo", "dreamerv3", "tdmpc2"), default="ppo")
+    parser.add_argument("--baseline", choices=("ppo", "ppo_aug", "dreamerv3", "tdmpc2"),
+                        default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")
     parser.add_argument("--smoke", action="store_true",
@@ -296,7 +310,9 @@ def main() -> None:
 
     from config import (
         DreamerV3Config,
+        PPOAugConfig,
         SmokeDreamerV3Config,
+        SmokePPOAugConfig,
         SmokeTDMPC2Config,
         TDMPC2Config,
     )
@@ -304,6 +320,8 @@ def main() -> None:
     config_classes = {
         ("ppo", False): PPOConfig,
         ("ppo", True): SmokePPOConfig,
+        ("ppo_aug", False): PPOAugConfig,
+        ("ppo_aug", True): SmokePPOAugConfig,
         ("dreamerv3", False): DreamerV3Config,
         ("dreamerv3", True): SmokeDreamerV3Config,
         ("tdmpc2", False): TDMPC2Config,

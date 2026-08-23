@@ -1,8 +1,11 @@
-"""Train the PPO baseline (stable-baselines3) on visual variant A.
+"""Train the PPO-family baselines (stable-baselines3) on visual variant A.
 
-Trains a CnnPolicy on the fixed ObjectNav task in house A, with periodic
-checkpoints and CSV episode logs. The saved final model is then consumed by
-``scripts/evaluate_transfer.py`` for the zero-shot A->B comparison.
+Covers both ``ppo`` (vanilla) and ``ppo_aug`` (train-time photometric jitter,
+the augmentation/domain-randomization baseline). The two share the exact same
+recipe, budget, and protocol; ``cfg.augment`` is the ONLY difference, and it
+applies to the TRAINING env only — ``scripts/evaluate_transfer.py`` always
+builds raw, un-augmented eval envs, so the paired A/B protocol is identical
+across all baselines.
 
 Usage:
     python scripts/train_ppo.py [--total-steps N] [--smoke]
@@ -38,9 +41,15 @@ from envs.procthor_env import ObjectNavConfig, make_objectnav_env  # noqa: E402
 
 logger = logging.getLogger("train_ppo")
 
-PPO_CKPT_DIR = CHECKPOINTS_DIR / "ppo"
-PPO_LOG_DIR = LOGS_DIR / "ppo"
-FINAL_MODEL_PATH = PPO_CKPT_DIR / "ppo_final"
+
+def ckpt_dir(baseline_name: str = "ppo") -> Path:
+    """Checkpoint directory for a PPO-family baseline ('ppo' / 'ppo_aug')."""
+    return CHECKPOINTS_DIR / baseline_name
+
+
+def final_model_path(baseline_name: str = "ppo") -> Path:
+    """Final SB3 model path (without the .zip suffix SB3 appends on save)."""
+    return ckpt_dir(baseline_name) / "ppo_final"
 
 
 def build_env_config(ppo_cfg: PPOConfig) -> ObjectNavConfig:
@@ -64,13 +73,36 @@ def train(ppo_cfg: PPOConfig) -> Path:
     from stable_baselines3.common.monitor import Monitor
 
     ensure_dirs()
-    PPO_CKPT_DIR.mkdir(parents=True, exist_ok=True)
-    PPO_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    name = getattr(ppo_cfg, "baseline_name", "ppo")
+    ckpt = ckpt_dir(name)
+    log_dir = LOGS_DIR / name
+    ckpt.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     env_cfg = build_env_config(ppo_cfg)
+    env = make_objectnav_env(HOUSE_A_PATH, env_cfg, name="variant_a")
+    if getattr(ppo_cfg, "augment", False):
+        from envs.augmentation import PhotometricJitter
+
+        env = PhotometricJitter(
+            env,
+            brightness=ppo_cfg.aug_brightness,
+            contrast=ppo_cfg.aug_contrast,
+            saturation=ppo_cfg.aug_saturation,
+            hue_degrees=ppo_cfg.aug_hue_degrees,
+            resample=ppo_cfg.aug_resample,
+            seed=ppo_cfg.seed,
+        )
+        logger.info(
+            "train-time photometric jitter ACTIVE (b=%.2f c=%.2f s=%.2f "
+            "hue=+/-%.0fdeg, resample per %s) — eval stays un-augmented",
+            ppo_cfg.aug_brightness, ppo_cfg.aug_contrast,
+            ppo_cfg.aug_saturation, ppo_cfg.aug_hue_degrees,
+            ppo_cfg.aug_resample,
+        )
     env = Monitor(
-        make_objectnav_env(HOUSE_A_PATH, env_cfg, name="variant_a"),
-        filename=str(PPO_LOG_DIR / "train_variant_a"),
+        env,
+        filename=str(log_dir / "train_variant_a"),
         info_keywords=("success", "spl"),
     )
     # Seed the start-pose RNG once; training episodes then vary reproducibly.
@@ -78,8 +110,8 @@ def train(ppo_cfg: PPOConfig) -> Path:
 
     device = get_device()
     logger.info(
-        "training PPO on device=%s for %d steps (target=%s)",
-        device, ppo_cfg.total_timesteps, env_cfg.target_object_type,
+        "training %s on device=%s for %d steps (target=%s)",
+        name, device, ppo_cfg.total_timesteps, env_cfg.target_object_type,
     )
     model = PPO(
         "CnnPolicy",
@@ -98,7 +130,7 @@ def train(ppo_cfg: PPOConfig) -> Path:
     )
     checkpoint_cb = CheckpointCallback(
         save_freq=ppo_cfg.checkpoint_freq,
-        save_path=str(PPO_CKPT_DIR),
+        save_path=str(ckpt),
         name_prefix="ppo",
     )
 
@@ -107,10 +139,11 @@ def train(ppo_cfg: PPOConfig) -> Path:
     elapsed = time.time() - start
     logger.info("training finished in %.1f min", elapsed / 60.0)
 
-    model.save(str(FINAL_MODEL_PATH))
+    final = final_model_path(name)
+    model.save(str(final))
     env.close()
-    logger.info("saved final model to %s.zip", FINAL_MODEL_PATH)
-    return FINAL_MODEL_PATH
+    logger.info("saved final model to %s.zip", final)
+    return final
 
 
 def main() -> None:

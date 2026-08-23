@@ -7,9 +7,10 @@ Stages (run all, or pick one with --stage):
     eval       zero-shot transfer evaluation A vs B (frozen weights)
 
 Baselines:
-    ppo        stable-baselines3 PPO (implemented)
-    dreamerv3  vendored NM512 DreamerV3 world model (implemented)
-    tdmpc2     world-model baseline (adapter stub — next milestone)
+    ppo        stable-baselines3 PPO
+    ppo_aug    PPO + train-time photometric jitter (augmentation baseline)
+    dreamerv3  vendored NM512 DreamerV3 world model
+    tdmpc2     vendored nicklashansen/tdmpc2 world model
 
 Examples:
     python main.py --smoke                 # fast end-to-end pipeline check
@@ -31,13 +32,28 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Smoke runs must NEVER touch the real results tree: a smoke eval overwrites
+# results/tables/<baseline>_* in place (this clobbered the committed full-run
+# tables once — commit 1b93a05, 2026-08-20, repaired in 88f2a87). Redirect to
+# a throwaway dir unless the caller already isolated the run (as the slurm
+# templates do). Must happen BEFORE `config` is imported (RESULTS_DIR is
+# resolved at config import time).
+if "--smoke" in sys.argv and "NSL_RESULTS_DIR" not in os.environ:
+    _smoke_results = Path(__file__).resolve().parent / (
+        "results_smoke_local_" + time.strftime("%Y%m%d_%H%M%S")
+    )
+    os.environ["NSL_RESULTS_DIR"] = str(_smoke_results)
+    print(f"[smoke] results redirected to {_smoke_results} (gitignored)")
+
 from config import (  # noqa: E402
     HOUSE_A_PATH,
     HOUSE_B_PATH,
     LOGS_DIR,
     DreamerV3Config,
+    PPOAugConfig,
     PPOConfig,
     SmokeDreamerV3Config,
+    SmokePPOAugConfig,
     SmokePPOConfig,
     SmokeTDMPC2Config,
     TDMPC2Config,
@@ -46,13 +62,15 @@ from config import (  # noqa: E402
 
 logger = logging.getLogger("main")
 
-IMPLEMENTED_BASELINES = ("ppo", "dreamerv3", "tdmpc2")
+IMPLEMENTED_BASELINES = ("ppo", "ppo_aug", "dreamerv3", "tdmpc2")
 PLANNED_BASELINES = ()
 
 # (baseline, smoke) -> config dataclass
 CONFIG_CLASSES = {
     ("ppo", False): PPOConfig,
     ("ppo", True): SmokePPOConfig,
+    ("ppo_aug", False): PPOAugConfig,
+    ("ppo_aug", True): SmokePPOAugConfig,
     ("dreamerv3", False): DreamerV3Config,
     ("dreamerv3", True): SmokeDreamerV3Config,
     ("tdmpc2", False): TDMPC2Config,
@@ -72,7 +90,7 @@ def stage_generate(force: bool) -> None:
 
 
 def stage_train(baseline: str, cfg) -> None:
-    if baseline == "ppo":
+    if baseline in ("ppo", "ppo_aug"):
         from scripts.train_ppo import train
 
         train(cfg)
