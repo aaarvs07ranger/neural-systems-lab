@@ -34,7 +34,16 @@ conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
 
 export PYTHONUNBUFFERED=1
 export NSL_THOR_PLATFORM=cloudrendering
-export NSL_RESULTS_DIR="${SLURM_SUBMIT_DIR}/results_seed${SEED}"
+# Run outputs (checkpoints, replay buffers, logs, tables, plots) go to a RUN
+# ROOT that defaults to /gscratch/scrubbed/$USER/nsl-runs. Reason: on
+# 2026-08-23 the shared /gscratch/rao fileset hit 100% (4.0T, ~6G free) —
+# group-wide, not our data — and a job died with "Disk quota exceeded" while
+# saving its model. /gscratch/scrubbed has ~9T free. NOTE: scrubbed files are
+# auto-deleted after ~21 days, so rsync tables back into the repo promptly.
+# Override with `NSL_RUN_ROOT=$PWD sbatch ...` to write next to the repo.
+RUN_ROOT="${NSL_RUN_ROOT:-/gscratch/scrubbed/${USER}/nsl-runs}"
+mkdir -p "${RUN_ROOT}"
+export NSL_RESULTS_DIR="${RUN_ROOT}/results_seed${SEED}"
 
 cd "${SLURM_SUBMIT_DIR}"
 echo "[slurm] array task ${SLURM_ARRAY_JOB_ID}_${SEED} on $(hostname):" \

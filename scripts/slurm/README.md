@@ -31,7 +31,8 @@ NSL_EXTRA_ARGS="--train-ratio 512" sbatch scripts/slurm/train_baseline.sbatch dr
 # PPO full run:
 sbatch scripts/slurm/train_baseline.sbatch ppo
 
-# 5-seed parallel sweeps (isolated results_seed<N>/ trees, preemptible ckpt partition):
+# 5-seed parallel sweeps (isolated results_seed<N>/ trees under the RUN ROOT,
+# preemptible ckpt partition):
 NSL_EXTRA_ARGS="--train-ratio 512" sbatch scripts/slurm/sweep_seeds.sbatch dreamerv3
 sbatch scripts/slurm/sweep_seeds.sbatch ppo
 ```
@@ -57,11 +58,18 @@ sweeps, and the group partition for single must-finish runs.
 
 Summary tables and plots under `results/tables` + `results/plots` are
 git-tracked: commit and push them from klone, then pull on the laptop.
+**Run outputs live on scrubbed space.** Since 2026-08-23 the shared
+`/gscratch/rao` fileset has been 100% full (group-wide, not our data), so the
+sbatch templates write every run tree to
+`${NSL_RUN_ROOT:-/gscratch/scrubbed/$USER/nsl-runs}/`. Scrubbed files are
+**auto-deleted after ~21 days** — rsync tables back into the repo as soon as a
+sweep finishes. Set `NSL_RUN_ROOT=$PWD` to restore the old repo-local layout.
+
 Per-seed sweep trees (`results_seed*/`) and checkpoints are gitignored — rsync
 what you need (one authenticated ControlMaster connection covers this):
 
 ```bash
-rsync -av klone:/gscratch/rao/$USER/nsl/results_seed*/tables/ ./results/sweeps/
+rsync -av klone:/gscratch/scrubbed/$USER/nsl-runs/results_seed*/tables/ ./results/sweeps/
 ```
 
 ## Known tuning headroom (not yet enabled)
