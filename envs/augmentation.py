@@ -79,25 +79,40 @@ class PhotometricJitter(gym.ObservationWrapper):
     def observation(self, observation: np.ndarray) -> np.ndarray:
         if self._resample == "step":
             self._params = self._draw()
-        b, c, s, hue = self._params
+        return apply_jitter(observation, *self._params)
 
-        x = observation.astype(np.float32)
-        gray = x @ _LUMA                                   # (H, W) luma image
-        # saturation: blend with per-pixel grayscale
-        x = x * s + gray[..., None] * (1.0 - s)
-        # contrast: blend with the scalar mean of the grayscale image
-        x = x * c + float(gray.mean()) * (1.0 - c)
-        # brightness: scale
-        x = x * b
-        out = np.clip(x, 0.0, 255.0).astype(np.uint8)
 
-        if abs(hue) > 1e-6:
-            import cv2  # installed as an ai2thor dependency
+def apply_jitter(
+    frame: np.ndarray,
+    brightness: float,
+    contrast: float,
+    saturation: float,
+    hue_degrees: float,
+) -> np.ndarray:
+    """Apply one fixed set of jitter factors to a uint8 (H, W, 3) RGB frame.
 
-            # HSV_FULL maps hue onto [0, 255], so uint8 addition wraps the hue
-            # circle exactly (no 179-bucket truncation as with plain HSV).
-            hsv = cv2.cvtColor(out, cv2.COLOR_RGB2HSV_FULL)
-            shift = np.uint8(int(round(hue / 360.0 * 256.0)) % 256)
-            hsv[..., 0] = hsv[..., 0] + shift              # uint8 wraparound is intended
-            out = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB_FULL)
-        return np.ascontiguousarray(out)
+    Split out of :meth:`PhotometricJitter.observation` so the exact pixel math
+    the agent trains on can be reused elsewhere (see
+    ``scripts/visualize_augmentation.py``) without instantiating an env.
+    Neutral parameters (1, 1, 1, 0) are an identity transform.
+    """
+    x = frame.astype(np.float32)
+    gray = x @ _LUMA                                   # (H, W) luma image
+    # saturation: blend with per-pixel grayscale
+    x = x * saturation + gray[..., None] * (1.0 - saturation)
+    # contrast: blend with the scalar mean of the grayscale image
+    x = x * contrast + float(gray.mean()) * (1.0 - contrast)
+    # brightness: scale
+    x = x * brightness
+    out = np.clip(x, 0.0, 255.0).astype(np.uint8)
+
+    if abs(hue_degrees) > 1e-6:
+        import cv2  # installed as an ai2thor dependency
+
+        # HSV_FULL maps hue onto [0, 255], so uint8 addition wraps the hue
+        # circle exactly (no 179-bucket truncation as with plain HSV).
+        hsv = cv2.cvtColor(out, cv2.COLOR_RGB2HSV_FULL)
+        shift = np.uint8(int(round(hue_degrees / 360.0 * 256.0)) % 256)
+        hsv[..., 0] = hsv[..., 0] + shift              # uint8 wraparound is intended
+        out = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB_FULL)
+    return np.ascontiguousarray(out)
