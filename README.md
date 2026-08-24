@@ -92,16 +92,35 @@ main.py                       # pipeline: generate -> train -> transfer eval
 envs/
   procthor_env.py             # gymnasium ObjectNav env over a fixed ProcTHOR house
   generate_variants.py        # paired visual variants A/B + structural identity check
+  augmentation.py             # photometric jitter wrapper (ppo_aug, TRAIN PATH ONLY)
 models/
   common.py                   # BaselineAdapter protocol shared by all baselines
   dreamer_v3/                 # DreamerV3: vendored NM512 impl + adapter + THOR bridge
-  td_mpc2/                    # TD-MPC2 adapter (next milestone)
+  td_mpc2/                    # TD-MPC2: vendored nicklashansen impl + adapter
 scripts/
-  train_ppo.py                # PPO training on variant A (checkpoints + CSV logs)
+  train_ppo.py                # PPO / ppo_aug training on variant A
   evaluate_transfer.py        # frozen-policy A vs B eval, tables + plot
+  tracker.py                  # experiment tracker: backfill/ingest-sweep/add/render
+  plot_baselines.py           # headline figure across all baselines (per-seed dots)
+  record_rollout.py           # paired A/B rollout GIF + filmstrip from a checkpoint
+  visualize_variants.py       # A vs B screenshots from identical poses
+  visualize_augmentation.py   # what ppo_aug sees: jitter draws vs the real A->B shift
+  slurm/                      # Hyak (klone) job templates + workflow README
+tests/                        # contract tests (run directly; the pinned env has no pytest)
 data/                         # house_a/house_b JSON, task config, variant diff summary
-results/                      # checkpoints/, logs/, tables/, plots/
+results/                      # checkpoints/, logs/, tables/, plots/, sweeps/, tracker/
 ```
+
+## Evaluation platform rule (important)
+
+**A trained policy may only be evaluated under the renderer it trained with.**
+Cluster runs use headless CloudRendering (Vulkan); macOS uses the windowed
+build. Replaying a klone-trained PPO checkpoint locally scored 0.00 success on
+variant A where the same checkpoint scores 0.92 on the cluster — the graphics
+backend alone is a large enough appearance shift to break an appearance-bound
+policy. Record rollout figures on the cluster
+(`sbatch scripts/slurm/record_rollout.sbatch ppo results_seed0 10006,10020`);
+use the laptop for smoke tests and code, never for reported numbers.
 
 ## MPS / performance notes
 
