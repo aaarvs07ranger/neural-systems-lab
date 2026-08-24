@@ -17,7 +17,7 @@
 #SBATCH --mem=32G
 #SBATCH --gpus=1
 #SBATCH --time=01:00:00
-#SBATCH --output=slurm-%x-%j.out
+#SBATCH --output=/gscratch/scrubbed/%u/nsl-runs/slurm-%x-%j.out
 
 set -euo pipefail
 GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
@@ -37,6 +37,17 @@ export NSL_THOR_PLATFORM=cloudrendering
 # Override with `NSL_RUN_ROOT=$PWD sbatch ...` to write next to the repo.
 RUN_ROOT="${NSL_RUN_ROOT:-/gscratch/scrubbed/${USER}/nsl-runs}"
 mkdir -p "${RUN_ROOT}"
+# Preflight: the shared /gscratch/rao fileset has been running at 100% since
+# 2026-08-23. When it fills, writes fail mid-run and the crash is nearly
+# invisible (Python emits "--- Logging error ---", the slurm .out truncates,
+# and the job dies minutes later with a bare exit 1). Surface it up front.
+RAO_FREE_KB=$(df -Pk "/gscratch/rao/${USER}" | awk 'NR==2 {print $4}')
+echo "[slurm] /gscratch/rao free: $((RAO_FREE_KB / 1024)) MiB; run root: ${RUN_ROOT}"
+if [ "${RAO_FREE_KB}" -lt 5242880 ]; then
+    echo "[slurm] WARNING: <5 GiB free on /gscratch/rao — AI2-THOR writes into" \
+         "~/.ai2thor (symlinked there) and can die mid-run. Free space or" \
+         "relocate ~/.ai2thor before trusting long runs."
+fi
 export NSL_RESULTS_DIR="${RUN_ROOT}/results_smoke_${SLURM_JOB_ID}"
 
 cd "${SLURM_SUBMIT_DIR}"
