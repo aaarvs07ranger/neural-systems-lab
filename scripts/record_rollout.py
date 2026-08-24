@@ -98,8 +98,8 @@ def _panel(frame: np.ndarray, caption: str, ok: bool) -> "Any":
 def _caption(label: str, ep: Episode, i: int) -> str:
     """Frame caption; once an episode has ended its last frame is held, so say so."""
     if i >= len(ep["frames"]) - 1:
-        verdict = "reached target" if ep["success"] > 0 else "TIMEOUT, never found it"
-        return f"{label}  done t={ep['length']} — {verdict}"
+        verdict = "REACHED TARGET" if ep["success"] > 0 else "TIMEOUT, never found it"
+        return f"{label}  done t={ep['length']}: {verdict}"
     return f"{label}  t={i}"
 
 
