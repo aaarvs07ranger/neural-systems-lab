@@ -146,6 +146,9 @@ def make_row(*, summary_csv: Path, baseline: str, seed: int, date: str,
 
 def ingest_sweep(df: pd.DataFrame, sweep_dir: Path, prefix: str,
                  **meta: Any) -> pd.DataFrame:
+    # Resolve first: results_path below is stored relative to PROJECT_ROOT, and
+    # relative_to() fails on a CLI-supplied relative path like results/sweeps/x.
+    sweep_dir = sweep_dir.resolve()
     seed_dirs = sorted(sweep_dir.glob("seed*"))
     if not seed_dirs:
         raise FileNotFoundError(f"no seed*/ dirs under {sweep_dir}")

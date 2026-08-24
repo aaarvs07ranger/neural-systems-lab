@@ -1,16 +1,16 @@
-"""Headline figure: zero-shot visual transfer across all three baselines.
+"""Headline figure: zero-shot visual transfer across all baselines.
 
 Reads the committed per-seed sweep tables under ``results/sweeps/`` and renders
-one three-panel comparison (success rate, SPL, episode length): paired A/B mean
+one three-panel comparison (one bar group per baseline) (success rate, SPL, episode length): paired A/B mean
 bars per baseline with per-seed dots and ±1 std whiskers, plus the relative-drop
 annotation that carries the paper's headline. Palette and styling match
 ``scripts/evaluate_transfer.py`` (validated: A blue / B green pass CVD checks;
 the green is sub-3:1 on this surface, so bars carry direct value labels).
 
 Usage:
-    python scripts/plot_three_baselines.py
+    python scripts/plot_baselines.py
 Output:
-    results/plots/three_baseline_transfer.png
+    results/plots/baseline_transfer.png
 """
 from __future__ import annotations
 
@@ -32,12 +32,16 @@ COLOR_MUTED = "#898781"
 COLOR_GRID = "#e1e0d9"
 COLOR_BASELINE = "#c3c2b7"
 
+# Order = the paper's argument: model-free, model-free + the obvious fix,
+# then the two world models.
 SWEEPS = {
     "PPO": PROJECT_ROOT / "results/sweeps/ppo",
+    "PPO + aug": PROJECT_ROOT / "results/sweeps/ppo_aug",
     "DreamerV3-512": PROJECT_ROOT / "results/sweeps/dreamerv3_512",
     "TD-MPC2": PROJECT_ROOT / "results/sweeps/tdmpc2",
 }
-FILE_PREFIX = {"PPO": "ppo", "DreamerV3-512": "dreamerv3", "TD-MPC2": "tdmpc2"}
+FILE_PREFIX = {"PPO": "ppo", "PPO + aug": "ppo_aug",
+               "DreamerV3-512": "dreamerv3", "TD-MPC2": "tdmpc2"}
 METRICS = [
     ("success_rate", "Success rate", "%.2f", (0.0, 1.12)),
     ("spl", "SPL", "%.2f", (0.0, 1.12)),
@@ -69,7 +73,7 @@ def main() -> None:
     width = 0.30
     rng = np.random.default_rng(0)  # deterministic dot jitter
 
-    fig, axes = plt.subplots(1, 3, figsize=(12.6, 4.4), facecolor=COLOR_SURFACE)
+    fig, axes = plt.subplots(1, 3, figsize=(14.4, 4.6), facecolor=COLOR_SURFACE)
     for ax, (metric, title, fmt, ylim) in zip(axes, METRICS):
         ax.set_facecolor(COLOR_SURFACE)
         ax.grid(axis="y", color=COLOR_GRID, linewidth=0.8, zorder=0)
@@ -117,7 +121,7 @@ def main() -> None:
                         (x[i], 0), xytext=(0, -30), textcoords="offset points",
                         ha="center", fontsize=8, color=COLOR_MUTED)
 
-        ax.set_xticks(x, baselines, fontsize=9)
+        ax.set_xticks(x, baselines, fontsize=8.5)
         ax.set_ylim(0, top)
         ax.set_title(title, color=COLOR_INK, fontsize=11, loc="left")
 
@@ -125,12 +129,12 @@ def main() -> None:
     fig.legend(handles, labels, frameon=False, fontsize=9, labelcolor=COLOR_INK,
                loc="upper right", bbox_to_anchor=(0.995, 0.985), ncols=2)
     fig.suptitle(
-        "Zero-shot visual transfer — three baselines at published recipes,\n"
+        "Zero-shot visual transfer — four baselines at published recipes,\n"
         "5 training seeds each (dots = seeds, whiskers = ±1 std)",
         color=COLOR_INK, fontsize=12, x=0.01, ha="left",
     )
     fig.tight_layout(rect=(0, 0.02, 1, 0.90))
-    out = PROJECT_ROOT / "results/plots/three_baseline_transfer.png"
+    out = PROJECT_ROOT / "results/plots/baseline_transfer.png"
     fig.savefig(out, dpi=200, facecolor=COLOR_SURFACE, bbox_inches="tight")
     print(f"wrote {out}")
 
