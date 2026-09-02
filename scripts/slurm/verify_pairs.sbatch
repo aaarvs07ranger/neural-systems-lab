@@ -14,7 +14,10 @@
 #SBATCH --mem=32G
 #SBATCH --gpus=1
 #SBATCH --time=02:00:00
-#SBATCH --exclusive
+# NOTE: deliberately NOT --exclusive. The shared-node CloudRendering
+# failures we hit came from several of OUR OWN tasks landing on one node;
+# this is a single job, and --exclusive only made it queue behind a whole
+# free node for no benefit.
 #SBATCH --output=/gscratch/scrubbed/%u/nsl-runs/slurm-%x-%j.out
 
 set -euo pipefail
