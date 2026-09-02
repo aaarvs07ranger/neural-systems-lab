@@ -63,6 +63,8 @@ from config import (  # noqa: E402
     TASK_CONFIG_PATH,
     GenerationConfig,
     ensure_dirs,
+    pair_dir,
+    pair_house_path,
 )
 
 logger = logging.getLogger("generate_variants")
@@ -182,6 +184,54 @@ def pick_house(
         f"No house with <= {gen_cfg.max_rooms} rooms and a preferred target "
         f"found in the first {gen_cfg.scan_limit} houses."
     )
+
+
+def pick_houses(
+    dataset: Sequence[House],
+    gen_cfg: GenerationConfig,
+    n_pairs: int,
+    forced_index: Optional[int] = None,
+) -> List[Tuple[int, House, str]]:
+    """Choose ``n_pairs`` houses, spanning a range of sizes.
+
+    pair0 is whatever ``pick_house`` would have returned on its own, so the
+    originally selected house stays pair0 forever and the committed baseline
+    remains reproducible. The remaining pairs are drawn evenly across the
+    candidate list sorted by room count, so the grid covers small and larger
+    houses rather than five near-identical ones (house size is an axis Vishwas
+    asked for).
+    """
+    first_idx, first_house, first_target = pick_house(dataset, gen_cfg, forced_index)
+    chosen: List[Tuple[int, House, str]] = [(first_idx, first_house, first_target)]
+    if n_pairs <= 1:
+        return chosen
+
+    candidates: List[Tuple[int, int, House, str]] = []   # (n_rooms, idx, house, target)
+    for idx in range(min(gen_cfg.scan_limit, len(dataset))):
+        if idx == first_idx:
+            continue
+        house = dataset[idx]
+        n_rooms = len(house.get("rooms", []))
+        if n_rooms > gen_cfg.max_rooms:
+            continue
+        types = _object_types(house)
+        for target in gen_cfg.preferred_targets:
+            if target in types:
+                candidates.append((n_rooms, idx, house, target))
+                break
+    if not candidates:
+        raise RuntimeError("no additional candidate houses found for extra pairs")
+
+    candidates.sort(key=lambda c: (c[0], c[1]))          # by size, then index
+    wanted = min(n_pairs - 1, len(candidates))
+    # Evenly spaced picks across the size-sorted list.
+    step = len(candidates) / wanted
+    for k in range(wanted):
+        n_rooms, idx, house, target = candidates[int(k * step)]
+        chosen.append((idx, house, target))
+        logger.info("pair%d: house %d (%d room(s), target %s)",
+                    len(chosen) - 1, idx, n_rooms, target)
+    return chosen
 
 
 def harvest_pools(
@@ -605,10 +655,16 @@ def assert_structurally_identical(
 # ---------------------------------------------------------------------------
 # Summary writer
 # ---------------------------------------------------------------------------
-def variant_path(level: str) -> Path:
-    """Output path for a variant. L1 keeps the legacy filename on purpose: the
-    committed baseline results were produced from ``data/house_b.json`` and must
-    stay reproducible from that exact path."""
+def variant_path(level: str, pair_id: Optional[str] = None) -> Path:
+    """Output path for one variant.
+
+    With ``pair_id`` this is the per-pair layout (``data/pairs/pair0/b_L1.json``).
+    Without it, the flat legacy layout is used: L1 keeps the ``data/house_b.json``
+    filename on purpose, because the committed baseline results were produced
+    from that exact path and must stay reproducible from it.
+    """
+    if pair_id is not None:
+        return pair_house_path(pair_id, level)
     return HOUSE_B_PATH if level == "L1" else DATA_DIR / f"house_b_{level}.json"
 
 
@@ -690,8 +746,15 @@ def generate(
     forced_index: Optional[int] = None,
     seed: Optional[int] = None,
     levels: Optional[Sequence[str]] = None,
+    n_pairs: Optional[int] = None,
 ) -> None:
-    """Full generation pass; safe to re-run (outputs are overwritten)."""
+    """Generate every house pair at every requested level. Safe to re-run.
+
+    Writes ``data/pairs/pair<N>/{a,b_L1,b_L2,b_L3}.json`` plus per-pair
+    provenance. pair0 is additionally written to the legacy flat paths
+    (``data/house_a.json``, ``data/house_b.json``) byte-identically, so results
+    produced before the multi-pair layout existed stay reproducible.
+    """
     gen_cfg = GenerationConfig()
     if seed is None:
         seed = gen_cfg.variant_seed
@@ -699,6 +762,7 @@ def generate(
     unknown = [lv for lv in requested if lv not in LEVELS]
     if unknown:
         raise ValueError(f"unknown level(s) {unknown}; valid: {LEVELS}")
+    pairs_wanted = int(n_pairs if n_pairs is not None else gen_cfg.n_pairs)
     ensure_dirs()
 
     import prior  # deferred: downloads dataset on first use
@@ -710,48 +774,86 @@ def generate(
     )[gen_cfg.split]
     logger.info("dataset ready: %d houses", len(dataset))
 
-    house_index, house_a, target = pick_house(dataset, gen_cfg, forced_index)
+    houses = pick_houses(dataset, gen_cfg, pairs_wanted, forced_index)
     pools = harvest_pools(dataset, gen_cfg.scan_limit)
-    # Only harvested when a rung actually needs it; L1-only runs stay as cheap
-    # as they were before the ladder existed.
     asset_pool = (harvest_asset_pool(dataset, gen_cfg.scan_limit)
                   if any(lv in ("L2", "L3") for lv in requested) else {})
 
-    reports: Dict[str, Dict[str, Any]] = {}
-    for level in requested:
-        house_b, report = build_variant(
-            house_a, pools, seed, level=level, asset_pool=asset_pool,
-            target_object_type=target, n_distractors=gen_cfg.n_distractors,
-        )
-        assert_structurally_identical(house_a, house_b, level=level,
-                                      target_object_type=target)
-        out_path = variant_path(level)
-        with open(out_path, "w") as f:
-            json.dump(house_b, f)
-        reports[level] = report
-        logger.info("wrote %s (%s)", out_path, level)
+    index: List[Dict[str, Any]] = []
+    for pair_num, (house_index, house_a, target) in enumerate(houses):
+        pair_id = f"pair{pair_num}"
+        out_dir = pair_dir(pair_id)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # Per-pair seed keeps pair0 identical to the original single-pair run.
+        pair_seed = seed if pair_num == 0 else seed + pair_num
 
-    with open(HOUSE_A_PATH, "w") as f:
-        json.dump(house_a, f)
-    task_config = {
-        "dataset": gen_cfg.dataset,
-        "dataset_revision": gen_cfg.dataset_revision,
-        "split": gen_cfg.split,
-        "house_index": house_index,
-        "target_object_type": target,
-        "variant_seed": seed,
-        "house_a": str(HOUSE_A_PATH.name),
-        "house_b": str(HOUSE_B_PATH.name),
-        "levels": {lv: variant_path(lv).name for lv in requested},
-        "n_distractors": gen_cfg.n_distractors,
-    }
-    with open(TASK_CONFIG_PATH, "w") as f:
-        json.dump(task_config, f, indent=2)
-    write_summary(DATA_DIR / "variants_summary.md", house_index, target, seed, reports)
+        reports: Dict[str, Dict[str, Any]] = {}
+        for level in requested:
+            house_b, report = build_variant(
+                house_a, pools, pair_seed, level=level, asset_pool=asset_pool,
+                target_object_type=target, n_distractors=gen_cfg.n_distractors,
+            )
+            assert_structurally_identical(house_a, house_b, level=level,
+                                          target_object_type=target)
+            with open(variant_path(level, pair_id), "w") as f:
+                json.dump(house_b, f)
+            if pair_num == 0:                      # legacy flat path
+                with open(variant_path(level), "w") as f:
+                    json.dump(house_b, f)
+            reports[level] = report
 
-    logger.info("wrote %s, %s, %s", HOUSE_A_PATH,
-                ", ".join(str(variant_path(lv)) for lv in requested),
-                TASK_CONFIG_PATH)
+        with open(pair_house_path(pair_id, "A"), "w") as f:
+            json.dump(house_a, f)
+        if pair_num == 0:
+            with open(HOUSE_A_PATH, "w") as f:
+                json.dump(house_a, f)
+
+        pair_config = {
+            "pair_id": pair_id,
+            "dataset": gen_cfg.dataset,
+            "dataset_revision": gen_cfg.dataset_revision,
+            "split": gen_cfg.split,
+            "house_index": house_index,
+            "target_object_type": target,
+            "variant_seed": pair_seed,
+            "n_rooms": len(house_a.get("rooms", [])),
+            "n_objects": sum(1 for _ in _iter_objects(house_a.get("objects", []))),
+            "levels": {lv: variant_path(lv, pair_id).name for lv in requested},
+            "n_distractors_requested": gen_cfg.n_distractors,
+            "n_distractors_placed": {
+                lv: len(reports[lv].get("l3_distractors", [])) for lv in requested
+                if "l3_distractors" in reports[lv]
+            },
+        }
+        with open(out_dir / "task_config.json", "w") as f:
+            json.dump(pair_config, f, indent=2)
+        write_summary(out_dir / "summary.md", house_index, target, pair_seed, reports)
+        index.append(pair_config)
+        logger.info("%s: house %d, target %s, %d room(s) -> %s",
+                    pair_id, house_index, target, pair_config["n_rooms"], out_dir)
+
+        if pair_num == 0:   # legacy provenance file, unchanged shape
+            with open(TASK_CONFIG_PATH, "w") as f:
+                json.dump({k: v for k, v in {
+                    "dataset": gen_cfg.dataset,
+                    "dataset_revision": gen_cfg.dataset_revision,
+                    "split": gen_cfg.split,
+                    "house_index": house_index,
+                    "target_object_type": target,
+                    "variant_seed": pair_seed,
+                    "house_a": HOUSE_A_PATH.name,
+                    "house_b": HOUSE_B_PATH.name,
+                    "levels": {lv: variant_path(lv).name for lv in requested},
+                    "n_distractors": gen_cfg.n_distractors,
+                }.items()}, f, indent=2)
+            write_summary(DATA_DIR / "variants_summary.md", house_index, target,
+                          pair_seed, reports)
+
+    with open(DATA_DIR / "pairs_index.json", "w") as f:
+        json.dump({"n_pairs": len(index), "levels": list(requested), "pairs": index},
+                  f, indent=2)
+    logger.info("wrote %d pair(s) x %d level(s) under %s",
+                len(index), len(requested), pair_dir("").parent)
 
 
 def main() -> None:
@@ -764,9 +866,12 @@ def main() -> None:
     parser.add_argument("--levels", type=str, default=None,
                         help=f"comma-separated severity rungs to generate "
                              f"(default: all of {','.join(LEVELS)})")
+    parser.add_argument("--pairs", type=int, default=None,
+                        help="how many house pairs to generate (default: config)")
     args = parser.parse_args()
     levels = [lv.strip() for lv in args.levels.split(",")] if args.levels else None
-    generate(forced_index=args.house_index, seed=args.seed, levels=levels)
+    generate(forced_index=args.house_index, seed=args.seed, levels=levels,
+             n_pairs=args.pairs)
 
 
 if __name__ == "__main__":

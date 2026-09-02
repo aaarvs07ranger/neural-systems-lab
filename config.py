@@ -24,14 +24,30 @@ CHECKPOINTS_DIR: Path = RESULTS_DIR / "checkpoints"
 TABLES_DIR: Path = RESULTS_DIR / "tables"
 PLOTS_DIR: Path = RESULTS_DIR / "plots"
 
-HOUSE_A_PATH: Path = DATA_DIR / "house_a.json"          # training visual variant
-HOUSE_B_PATH: Path = DATA_DIR / "house_b.json"          # zero-shot transfer variant
+# Multi-pair layout: data/pairs/<pair_id>/{a,b_L1,b_L2,b_L3}.json
+# pair0 is ALSO written to the two legacy paths below, byte-identical, so every
+# committed result stays reproducible from the paths it was produced with.
+PAIRS_DIR: Path = DATA_DIR / "pairs"
+
+HOUSE_A_PATH: Path = DATA_DIR / "house_a.json"          # training visual variant (pair0)
+HOUSE_B_PATH: Path = DATA_DIR / "house_b.json"          # zero-shot transfer variant (pair0, L1)
+
+
+def pair_dir(pair_id: str) -> Path:
+    """Directory holding one house pair's variants and provenance."""
+    return PAIRS_DIR / pair_id
+
+
+def pair_house_path(pair_id: str, level: str) -> Path:
+    """Path to one house of one pair. ``level='A'`` is the training house."""
+    return pair_dir(pair_id) / ("a.json" if level == "A" else f"b_{level}.json")
 TASK_CONFIG_PATH: Path = DATA_DIR / "task_config.json"  # target object, seeds, provenance
 
 
 def ensure_dirs() -> None:
     """Create all output directories (idempotent)."""
-    for d in (DATA_DIR, RESULTS_DIR, LOGS_DIR, CHECKPOINTS_DIR, TABLES_DIR, PLOTS_DIR):
+    for d in (DATA_DIR, PAIRS_DIR, RESULTS_DIR, LOGS_DIR, CHECKPOINTS_DIR,
+              TABLES_DIR, PLOTS_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
 
@@ -76,6 +92,10 @@ class GenerationConfig:
     # invalidates paired starts and SPL comparability.)
     levels: Tuple[str, ...] = ("L1", "L2", "L3")
     n_distractors: int = 8         # objects added at L3, on receptacle surfaces
+    # House pairs to generate. pair0 is pinned to the originally selected house
+    # so the committed baseline stays reproducible; the rest are chosen to span
+    # a range of house sizes (Vishwas's suggestion: vary house size).
+    n_pairs: int = 5
 
 
 # ---------------------------------------------------------------------------
