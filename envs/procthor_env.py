@@ -101,6 +101,12 @@ class ObjectNavConfig:
     actions: Tuple[str, ...] = (
         "MoveAhead", "RotateLeft", "RotateRight", "LookUp", "LookDown",
     )
+    # T2 (sequential ObjectNav): visit these object types IN ORDER. Empty means
+    # the single-goal task T1, i.e. just ``target_object_type`` -- so T1 is a
+    # one-element special case of T2 and shares every line of code below.
+    # ``max_steps`` is the budget PER LEG, so a 3-leg episode gets 600 steps and
+    # the per-leg budget stays constant across tasks.
+    target_sequence: Tuple[str, ...] = ()
 
 
 class ProcTHORObjectNavEnv(gym.Env):
@@ -123,6 +129,12 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._cfg = config
         self.name = name
 
+        # One canonical list of goals. T1 is len == 1.
+        self._sequence: Tuple[str, ...] = tuple(
+            config.target_sequence or (config.target_object_type,)
+        )
+        self._max_steps: int = config.max_steps * len(self._sequence)
+
         self.observation_space = spaces.Box(
             low=0, high=255, shape=(config.height, config.width, 3), dtype=np.uint8
         )
@@ -140,6 +152,11 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._prev_dist: float = float("inf")
         self._last_pos: Vec3 = {"x": 0.0, "y": 0.0, "z": 0.0}
         self._last_frame: Optional[np.ndarray] = None
+        # Sequential-task state (unused when len(self._sequence) == 1).
+        self._leg: int = 0
+        self._leg_steps: List[int] = []
+        self._leg_paths: List[float] = []
+        self._oracle_legs: List[float] = []
 
     # ------------------------------------------------------------------
     # Controller lifecycle
@@ -235,17 +252,20 @@ class ProcTHORObjectNavEnv(gym.Env):
     # ------------------------------------------------------------------
     # Target bookkeeping
     # ------------------------------------------------------------------
-    def _target_state(self, metadata: Dict[str, Any]) -> Tuple[float, bool]:
+    def _target_state(
+        self, metadata: Dict[str, Any], target_type: Optional[str] = None
+    ) -> Tuple[float, bool]:
         """Return (distance to closest target instance, success predicate).
 
         Success requires proximity and — if configured — that a sufficiently
         close instance is visible on screen.
         """
+        target_type = target_type or self._sequence[self._leg]
         agent_pos: Vec3 = metadata["agent"]["position"]
         min_dist = float("inf")
         success = False
         for obj in metadata["objects"]:
-            if obj["objectType"] != self._cfg.target_object_type:
+            if obj["objectType"] != target_type:
                 continue
             d = _xz_distance(agent_pos, obj["position"])
             min_dist = min(min_dist, d)
@@ -255,12 +275,15 @@ class ProcTHORObjectNavEnv(gym.Env):
         if math.isinf(min_dist):
             raise RuntimeError(
                 f"[{self.name}] no instance of target type "
-                f"'{self._cfg.target_object_type}' exists in this house."
+                f"'{target_type}' exists in this house."
             )
         return min_dist, success
 
-    def _shortest_path_length(self, start: Vec3) -> float:
+    def _shortest_path_length(
+        self, start: Vec3, target_type: Optional[str] = None
+    ) -> float:
         """Geodesic start->target length for SPL (straight-line fallback)."""
+        target_type = target_type or self._sequence[0]
         assert self._controller is not None
         try:
             from ai2thor.util.metrics import (  # deferred: optional dependency path
@@ -269,18 +292,39 @@ class ProcTHORObjectNavEnv(gym.Env):
             )
 
             path = get_shortest_path_to_object_type(
-                self._controller, self._cfg.target_object_type, initial_position=start
+                self._controller, target_type, initial_position=start
             )
+            self._last_path_end = dict(path[-1]) if path else dict(start)
             return float(path_distance(path))
         except Exception as exc:  # pathfinding can fail on procedural navmeshes
             logger.debug("[%s] shortest-path fallback (%s)", self.name, exc)
             metadata = self._controller.last_event.metadata
-            dists = [
-                _xz_distance(start, o["position"])
-                for o in metadata["objects"]
-                if o["objectType"] == self._cfg.target_object_type
-            ]
-            return float(min(dists)) if dists else 0.0
+            candidates = [o for o in metadata["objects"]
+                          if o["objectType"] == target_type]
+            if not candidates:
+                self._last_path_end = dict(start)
+                return 0.0
+            nearest = min(candidates,
+                          key=lambda o: _xz_distance(start, o["position"]))
+            self._last_path_end = dict(nearest["position"])
+            return float(_xz_distance(start, nearest["position"]))
+
+    def _oracle_chain(self, start: Vec3) -> List[float]:
+        """Per-leg geodesic lengths for the shortest route visiting the whole
+        itinerary in order: start -> T1 -> T2 -> ...
+
+        This is the SPL denominator. It depends only on the start pose and the
+        itinerary, never on what the agent actually does, which is what keeps
+        it a fair yardstick and keeps it identical between variant A and B
+        (guaranteed by the C2 check in envs/verify_pairs.py).
+        """
+        legs: List[float] = []
+        cursor = dict(start)
+        for target_type in self._sequence:
+            self._last_path_end = dict(cursor)
+            legs.append(self._shortest_path_length(cursor, target_type))
+            cursor = dict(getattr(self, "_last_path_end", cursor))
+        return legs
 
     # ------------------------------------------------------------------
     # gymnasium API
@@ -318,14 +362,20 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._steps = 0
         self._path_length = 0.0
         self._last_pos = start_pos
+        self._leg = 0
+        self._leg_steps = []
+        self._leg_paths = []
         self._prev_dist, _ = self._target_state(metadata)
-        self._shortest_path = self._shortest_path_length(start_pos)
+        self._oracle_legs = self._oracle_chain(start_pos)
+        self._shortest_path = float(sum(self._oracle_legs))
         self._last_frame = self._frame_to_obs(event)
 
         info: Dict[str, Any] = {
             "start_position": start_pos,
             "shortest_path_length": self._shortest_path,
             "distance_to_target": self._prev_dist,
+            "n_legs": len(self._sequence),
+            "current_target": self._sequence[0],
         }
         return self._last_frame, info
 
@@ -350,21 +400,37 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._path_length += _xz_distance(self._last_pos, pos)
         self._last_pos = pos
 
-        dist, success = self._target_state(metadata)
-        # Dense shaping: reward progress toward the target, small time penalty.
+        dist, leg_done = self._target_state(metadata)
+        # Dense shaping: reward progress toward the CURRENT target, small time
+        # penalty. Identical to the single-goal case when there is one leg.
         reward = self._cfg.step_penalty + self._cfg.distance_reward_scale * (
             self._prev_dist - dist
         )
         self._prev_dist = dist
-        if success:
-            reward += self._cfg.success_reward
-
         self._steps += 1
+        if leg_done:
+            reward += self._cfg.success_reward
+            self._leg_steps.append(self._steps - sum(self._leg_steps))
+            self._leg_paths.append(self._path_length - sum(self._leg_paths))
+            self._leg += 1
+            if self._leg < len(self._sequence):
+                # Re-anchor the shaping on the NEXT target before the next step
+                # computes its delta. Without this the agent would eat one large
+                # negative reward at the exact moment it succeeded.
+                self._prev_dist, _ = self._target_state(metadata)
+
+        success = self._leg >= len(self._sequence)
         terminated = bool(success)
-        truncated = (not terminated) and self._steps >= self._cfg.max_steps
+        truncated = (not terminated) and self._steps >= self._max_steps
         self._last_frame = self._frame_to_obs(event)
 
-        info: Dict[str, Any] = {"distance_to_target": dist, "episode_step": self._steps}
+        info: Dict[str, Any] = {
+            "distance_to_target": dist,
+            "episode_step": self._steps,
+            "legs_completed": self._leg,
+            "current_target": (self._sequence[self._leg]
+                               if self._leg < len(self._sequence) else None),
+        }
         if terminated or truncated:
             # Episode metrics consumed by Monitor/eval (must exist at done).
             spl = 0.0
@@ -376,6 +442,15 @@ class ProcTHORObjectNavEnv(gym.Env):
                 spl=float(np.clip(spl, 0.0, 1.0)),
                 path_length=self._path_length,
                 shortest_path_length=self._shortest_path,
+                # Partial credit: how far through the itinerary it got. Always
+                # 0.0 or 1.0 for the single-goal task, so T1 tables are
+                # unaffected.
+                progress=float(self._leg) / float(len(self._sequence)),
+                legs_completed=self._leg,
+                n_legs=len(self._sequence),
+                leg_steps=list(self._leg_steps),
+                leg_path_lengths=[round(x, 4) for x in self._leg_paths],
+                oracle_leg_lengths=[round(x, 4) for x in self._oracle_legs],
             )
         return self._last_frame, float(reward), terminated, truncated, info
 

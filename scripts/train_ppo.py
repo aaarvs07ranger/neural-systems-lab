@@ -60,8 +60,13 @@ def build_env_config(ppo_cfg: PPOConfig) -> ObjectNavConfig:
             "(or `python main.py --stage generate`) first."
         )
     task = json.loads(TASK_CONFIG_PATH.read_text())
+    # T2 (sequential ObjectNav) is opt-in per house: a "target_sequence" key in
+    # the task config turns the task into an ordered itinerary. Absent, this is
+    # T1 and behaves exactly as it always has.
+    sequence = tuple(task.get("target_sequence", ()) or ())
     return ObjectNavConfig(
         target_object_type=task["target_object_type"],
+        target_sequence=sequence,
         max_steps=ppo_cfg.max_episode_steps,
     )
 
