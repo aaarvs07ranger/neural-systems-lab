@@ -70,6 +70,12 @@ class GenerationConfig:
     preferred_targets: Tuple[str, ...] = (
         "Television", "Fridge", "Bed", "Sofa", "Toilet", "Microwave",
     )
+    # Severity rungs to generate. Cumulative: L1 materials+lighting,
+    # L2 += object-appearance swaps, L3 += distractor objects.
+    # (L4, layout perturbation, is out of scope: it changes geometry and so
+    # invalidates paired starts and SPL comparability.)
+    levels: Tuple[str, ...] = ("L1", "L2", "L3")
+    n_distractors: int = 8         # objects added at L3, on receptacle surfaces
 
 
 # ---------------------------------------------------------------------------
