@@ -302,6 +302,29 @@ def harvest_asset_pool(
 # ---------------------------------------------------------------------------
 # Variant construction
 # ---------------------------------------------------------------------------
+def harvest_surface_types(
+    dataset: Sequence[House], scan_limit: int
+) -> Set[str]:
+    """Object types that ProcTHOR places ON other objects, learned from data.
+
+    L3 clutter must be the kind of thing that rests on a countertop. Deriving
+    that from the dataset beats hand-listing it: an Apple appears as a child of
+    a receptacle in real houses, a Dresser never does. Without this filter the
+    generator cheerfully placed a Dresser and a Sink on a countertop; physics
+    dropped both onto the floor, which blocked navigation and failed the C1
+    reachability check on every pair.
+    """
+    surface_types: Set[str] = set()
+    for idx in range(min(scan_limit, len(dataset))):
+        for obj in dataset[idx].get("objects", []):
+            for child in _iter_objects(obj.get("children", [])):
+                child_type = _object_type(child)
+                if child_type:
+                    surface_types.add(child_type)
+    logger.info("surface-dwelling types (valid L3 clutter): %d", len(surface_types))
+    return surface_types
+
+
 def _remap(
     originals: List[str], pool: List[str], rng: random.Random
 ) -> Dict[str, str]:
@@ -394,6 +417,7 @@ def _apply_l2(
     asset_pool: Dict[str, List[str]],
     rng: random.Random,
     report: Dict[str, Any],
+    safe_assets: Optional[Dict[str, List[str]]] = None,
 ) -> None:
     """Rung L2, in place: swap every object's asset for a different one of the
     SAME objectType.
@@ -411,9 +435,18 @@ def _apply_l2(
         if not obj_type or not isinstance(current, str) or not current:
             continue
         alternatives = [a for a in asset_pool.get(obj_type, []) if a != current]
+        reason = "no alternative asset in pool"
+        if safe_assets is not None:
+            # Only substitutions the simulator has confirmed leave the reachable
+            # floor unchanged (see envs/scan_safe_assets.py). Different assets of
+            # the same type have different collision footprints; an unverified
+            # swap silently breaks paired start poses.
+            allowed = set(safe_assets.get(str(obj.get("id", "")), []))
+            alternatives = [a for a in alternatives if a in allowed]
+            reason = "no footprint-safe alternative"
         if not alternatives:
             unswappable.append({"id": obj.get("id"), "type": obj_type,
-                                "asset": current, "reason": "no alternative asset in pool"})
+                                "asset": current, "reason": reason})
             continue
         replacement = rng.choice(alternatives)
         obj["assetId"] = replacement
@@ -432,6 +465,7 @@ def _apply_l3(
     target_object_type: str,
     n_distractors: int,
     report: Dict[str, Any],
+    surface_types: Optional[Set[str]] = None,
 ) -> None:
     """Rung L3, in place: add distractor objects on top of existing receptacles.
 
@@ -447,9 +481,13 @@ def _apply_l3(
     """
     present = {t for t in (_object_type(o)
                            for o in _iter_objects(house_b.get("objects", []))) if t}
-    absent = sorted(t for t in asset_pool
+    # Only things that genuinely rest on surfaces are eligible; see
+    # harvest_surface_types. Anything else falls to the floor and blocks
+    # navigation.
+    eligible = set(asset_pool) if surface_types is None else (set(asset_pool) & surface_types)
+    absent = sorted(t for t in eligible
                     if t not in present and t != target_object_type)
-    fallback = sorted(t for t in present if t != target_object_type)
+    fallback = sorted(t for t in (present & eligible) if t != target_object_type)
     candidates = absent or fallback
 
     # The target is never a host. Clutter resting ON the fridge occludes it and
@@ -521,6 +559,8 @@ def build_variant(
     asset_pool: Optional[Dict[str, List[str]]] = None,
     target_object_type: Optional[str] = None,
     n_distractors: int = 8,
+    safe_assets: Optional[Dict[str, List[str]]] = None,
+    surface_types: Optional[Set[str]] = None,
 ) -> Tuple[House, Dict[str, Any]]:
     """Deep-copy house A and apply every rung up to ``level``. Returns (B, report).
 
@@ -541,10 +581,11 @@ def build_variant(
 
     _apply_l1(house_b, pools, rng, report)
     if level in ("L2", "L3"):
-        _apply_l2(house_b, asset_pool or {}, rng, report)
+        _apply_l2(house_b, asset_pool or {}, rng, report, safe_assets=safe_assets)
     if level == "L3":
         _apply_l3(house_b, asset_pool or {}, rng,
-                  str(target_object_type), n_distractors, report)
+                  str(target_object_type), n_distractors, report,
+                  surface_types=surface_types)
     return house_b, report
 
 
@@ -776,8 +817,10 @@ def generate(
 
     houses = pick_houses(dataset, gen_cfg, pairs_wanted, forced_index)
     pools = harvest_pools(dataset, gen_cfg.scan_limit)
-    asset_pool = (harvest_asset_pool(dataset, gen_cfg.scan_limit)
-                  if any(lv in ("L2", "L3") for lv in requested) else {})
+    needs_objects = any(lv in ("L2", "L3") for lv in requested)
+    asset_pool = harvest_asset_pool(dataset, gen_cfg.scan_limit) if needs_objects else {}
+    surface_types = (harvest_surface_types(dataset, gen_cfg.scan_limit)
+                     if "L3" in requested else None)
 
     index: List[Dict[str, Any]] = []
     for pair_num, (house_index, house_a, target) in enumerate(houses):
@@ -787,11 +830,24 @@ def generate(
         # Per-pair seed keeps pair0 identical to the original single-pair run.
         pair_seed = seed if pair_num == 0 else seed + pair_num
 
+        # Footprint-safe substitutions, if the scan has been run for this pair.
+        safe_path = out_dir / "safe_assets.json"
+        safe_assets = None
+        if safe_path.exists():
+            safe_assets = {k: v["safe"] for k, v in
+                           json.loads(safe_path.read_text())["objects"].items()}
+            logger.info("%s: using verified safe-asset whitelist (%d objects)",
+                        pair_id, len(safe_assets))
+        elif "L2" in requested or "L3" in requested:
+            logger.warning("%s: no safe_assets.json -- L2 swaps are UNVERIFIED and "
+                           "will likely fail the C1 reachability check", pair_id)
+
         reports: Dict[str, Dict[str, Any]] = {}
         for level in requested:
             house_b, report = build_variant(
                 house_a, pools, pair_seed, level=level, asset_pool=asset_pool,
                 target_object_type=target, n_distractors=gen_cfg.n_distractors,
+                safe_assets=safe_assets, surface_types=surface_types,
             )
             assert_structurally_identical(house_a, house_b, level=level,
                                           target_object_type=target)
