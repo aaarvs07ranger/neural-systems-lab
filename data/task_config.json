@@ -6,5 +6,11 @@
   "target_object_type": "Fridge",
   "variant_seed": 1337,
   "house_a": "house_a.json",
-  "house_b": "house_b.json"
+  "house_b": "house_b.json",
+  "levels": {
+    "L1": "house_b.json",
+    "L2": "house_b_L2.json",
+    "L3": "house_b_L3.json"
+  },
+  "n_distractors": 8
 }

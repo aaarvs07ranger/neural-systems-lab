@@ -44,7 +44,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import GenerationConfig, PPOConfig, pair_dir, pair_house_path  # noqa: E402
-from envs.generate_variants import DISTRACTOR_TAG  # noqa: E402
+from envs.generate_variants import DISTRACTOR_TAG, variant_path  # noqa: E402
 from envs.procthor_env import ObjectNavConfig  # noqa: E402
 from envs.scan_safe_assets import _make_controller, _reachable  # noqa: E402
 
@@ -222,6 +222,19 @@ def prune_pair(
     # Houses are written compact, matching envs/generate_variants.py.
     with l3_path.open("w") as f:
         json.dump(pruned, f)
+    # generate_variants.py holds the invariant "pair0 is mirrored byte-identically
+    # to the legacy flat data/house_*.json paths". Pruning writes only into
+    # data/pairs/, so without this the flat copy keeps the UNPRUNED house -- a
+    # stale, unverified artifact sitting in the repo looking authoritative.
+    # Observed 2026-09-03: data/house_b_L3.json kept 4 distractors while the
+    # verified pair0/b_L3.json had 2.
+    if pair_id == "pair0":
+        legacy = variant_path("L3")
+        if legacy.exists():
+            with legacy.open("w") as f:
+                json.dump(pruned, f)
+            logger.info("[%s] mirrored the pruned house to the legacy path %s",
+                        pair_id, legacy)
     report = {
         "pair": pair_id,
         "n_placed": len(candidates),

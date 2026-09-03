@@ -251,6 +251,41 @@ def test_table_without_rotation_is_treated_as_uncovered() -> None:
     assert _env_with_table(_TABLE)._pinned_pose(10001) is None
 
 
+def test_legacy_flat_paths_mirror_pair0_exactly() -> None:
+    """data/house_*.json must be byte-identical to pair0's files.
+
+    generate_variants.py holds this invariant so every result committed before
+    the multi-pair layout existed still reproduces from the paths it was
+    produced with. prune_l3.py broke it once by rewriting only data/pairs/,
+    leaving an UNPRUNED house at the flat path that looked authoritative.
+    """
+    import hashlib
+
+    pairs = {"a.json": "house_a.json", "b_L1.json": "house_b.json",
+             "b_L2.json": "house_b_L2.json", "b_L3.json": "house_b_L3.json"}
+    for src, dst in pairs.items():
+        a, b = config.pair_dir("pair0") / src, config.DATA_DIR / dst
+        if not (a.exists() and b.exists()):
+            continue                       # rung not generated in this checkout
+        da = hashlib.sha256(a.read_bytes()).hexdigest()
+        db = hashlib.sha256(b.read_bytes()).hexdigest()
+        assert da == db, f"{dst} has drifted from pair0/{src}"
+
+
+def test_every_committed_variant_is_verified() -> None:
+    """No house may sit in the repo without a passing C1-C3 record."""
+    import json as _json
+
+    for i in range(config.GenerationConfig().n_pairs):
+        vp = config.pair_dir(f"pair{i}") / "verification.json"
+        if not vp.exists():
+            continue
+        rec = _json.loads(vp.read_text())
+        assert rec.get("passed"), f"pair{i} verification.json says not passed"
+        for level, entry in rec["levels"].items():
+            assert entry["passed"], f"pair{i} {level} did not pass"
+
+
 def main() -> None:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
