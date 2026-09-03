@@ -37,6 +37,41 @@ NSL_EXTRA_ARGS="--train-ratio 512" sbatch scripts/slurm/sweep_seeds.sbatch dream
 sbatch scripts/slurm/sweep_seeds.sbatch ppo
 ```
 
+### The Phase-1 grid
+
+First, generate and verify the houses (once, not per run). The gate exits
+non-zero unless all 15 variants pass, so it can guard the launch:
+
+```bash
+sbatch scripts/slurm/scan_safe_assets.sbatch     # footprint-safe L2 assets + pickupable list
+sbatch scripts/slurm/regen_and_verify.sbatch     # generate -> prune L3 -> C1-C3 gate
+```
+
+Then one array job per baseline. 25 tasks each = 5 house pairs x 5 seeds:
+
+```bash
+sbatch scripts/slurm/sweep_grid.sbatch ppo
+sbatch scripts/slurm/sweep_grid.sbatch ppo_aug
+NSL_EXTRA_ARGS="--train-ratio 512" sbatch scripts/slurm/sweep_grid.sbatch dreamerv3
+sbatch scripts/slurm/sweep_grid.sbatch tdmpc2
+```
+
+100 training runs total, **not** 300: the agent only ever trains in house A, and
+the severity rung changes which house is *evaluated*. Each run walks
+A -> L1 -> L2 -> L3 inside its own evaluation, so rungs cost eval episodes
+rather than training runs.
+
+`--array=0-24%10` caps concurrency at 10 tasks. That cap is a disk budget, not a
+politeness setting: each world-model run holds ~6 GB of replay, so 10 at once is
+~60 GB of peak transient storage instead of ~450 GB. Tighten it with
+`sbatch --array=0-24%4 ...` if scrubbed is under pressure.
+
+Each task copies its tables into `results/grid/<baseline>/pair<N>_seed<M>/` in
+the repo as soon as they are written, then deletes its own replay buffer and
+intermediate checkpoints, keeping the final model. Tables must land in the repo
+promptly because scrubbed auto-purges after ~21 days and a grid this size
+straddles that window.
+
 Monitoring:
 
 ```bash
