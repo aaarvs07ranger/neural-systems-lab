@@ -48,6 +48,21 @@ TASK_CONFIG_PATH: Path = DATA_DIR / "task_config.json"  # target object, seeds, 
 # Severity rungs a transfer evaluation walks, in increasing order.
 EVAL_LEVELS: Tuple[str, ...] = ("L1", "L2", "L3")
 
+# --- Protocol v2: held-out evaluation start poses ---------------------------
+# Training seeds the pose RNG once and then streams unseeded, so with ~4,500
+# possible poses and 7,000+ training episodes an eval start was almost certainly
+# visited during training. The A->B contrast is unaffected (identical poses on
+# both sides), but "generalizes to unseen starts" is not currently claimable.
+#
+# Turning this on reserves a slice of the floor that training never samples.
+# It CHANGES THE NUMBERS, so it defaults OFF: every committed result stays
+# reproducible from the paths and flags it was produced with. The grid turns it
+# on for all four baselines at once (NSL_POSE_HOLDOUT=1 in the sweep script) --
+# a protocol change applied to one baseline would break comparability.
+POSE_HOLDOUT: bool = os.environ.get("NSL_POSE_HOLDOUT", "0") not in ("0", "", "false")
+EVAL_POSE_FRACTION: float = 0.2
+POSE_SPLIT_SEED: int = 20260903
+
 
 @dataclass(frozen=True)
 class PairPaths:

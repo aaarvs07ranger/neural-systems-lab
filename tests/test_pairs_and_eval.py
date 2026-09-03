@@ -124,6 +124,80 @@ def test_level_labels_cover_every_rung() -> None:
         assert level in LEVEL_LABELS, f"no table/figure label for {level}"
 
 
+# ---------------------------------------------------------------------------
+# Protocol v2: held-out evaluation start poses
+# ---------------------------------------------------------------------------
+def _env(split: str, **kw):
+    """An env object with no Unity behind it (the controller boots lazily)."""
+    from envs.procthor_env import ObjectNavConfig, ProcTHORObjectNavEnv
+
+    return ProcTHORObjectNavEnv(
+        {"objects": []}, ObjectNavConfig(pose_split=split, **kw), name="test",
+    )
+
+
+def _cells(n: int):
+    return [{"x": float(i), "y": 0.9, "z": 0.0} for i in range(n)]
+
+
+def test_holdout_is_off_by_default() -> None:
+    """Committed results must stay reproducible: no silent protocol change."""
+    assert config.POSE_HOLDOUT is False
+    cells = _cells(50)
+    assert _env("")._split_poses(cells) == cells
+
+
+def test_train_and_eval_slices_partition_the_floor() -> None:
+    cells = _cells(100)
+    train = {c["x"] for c in _env("train")._split_poses(cells)}
+    held = {c["x"] for c in _env("eval")._split_poses(cells)}
+    assert not (train & held), "an eval start was also available to training"
+    assert train | held == {c["x"] for c in cells}
+    assert len(held) == 20                      # eval_pose_fraction 0.2
+
+
+def test_split_does_not_move_with_the_training_seed() -> None:
+    """The partition must be identical across baselines, seeds and rungs.
+
+    It is drawn from a fixed constant, never the training seed -- otherwise two
+    seeds of the same baseline would be evaluated on different floors and could
+    not be averaged.
+    """
+    cells = _cells(200)
+    first = _env("eval")._split_poses(cells)
+    for _ in range(3):
+        assert _env("eval")._split_poses(cells) == first
+    # A different split seed must give a different partition (the knob works).
+    other = _env("eval", pose_split_seed=1)._split_poses(cells)
+    assert other != first
+
+
+def test_split_survives_reordering_only_through_the_sorted_set() -> None:
+    """Slices are positional, so the caller's deterministic sort is load-bearing."""
+    cells = _cells(40)
+    a = _env("eval")._split_poses(cells)
+    b = _env("eval")._split_poses(list(cells))
+    assert a == b
+
+
+def test_bad_split_name_is_rejected() -> None:
+    try:
+        _env("holdout")._split_poses(_cells(10))
+    except ValueError as exc:
+        assert "pose_split" in str(exc)
+    else:
+        raise AssertionError("a typo'd split name must not silently pass")
+
+
+def test_tiny_house_refuses_to_leave_training_with_nothing() -> None:
+    try:
+        _env("train", eval_pose_fraction=1.0)._split_poses(_cells(4))
+    except ValueError as exc:
+        assert "eval_pose_fraction" in str(exc)
+    else:
+        raise AssertionError("a fraction that empties training must raise")
+
+
 def main() -> None:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

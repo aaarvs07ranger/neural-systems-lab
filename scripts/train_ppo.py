@@ -51,13 +51,13 @@ def final_model_path(baseline_name: str = "ppo") -> Path:
     return ckpt_dir(baseline_name) / "ppo_final"
 
 
-def build_env_config(ppo_cfg: PPOConfig, pair=None) -> ObjectNavConfig:
+def build_env_config(ppo_cfg: PPOConfig, pair=None, split: str = "") -> ObjectNavConfig:
     """Re-exported from envs.task_setup (the one canonical assembly).
 
     Kept here because scripts/evaluate_transfer.py has always imported it from
     this module.
     """
-    return _build_env_config(ppo_cfg, pair)
+    return _build_env_config(ppo_cfg, pair, split)
 
 
 def train(ppo_cfg: PPOConfig, pair=None) -> Path:
@@ -74,7 +74,7 @@ def train(ppo_cfg: PPOConfig, pair=None) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     pair = pair if pair is not None else resolve_pair()
-    env_cfg = build_env_config(ppo_cfg, pair)
+    env_cfg = build_env_config(ppo_cfg, pair, split="train")
     env = make_objectnav_env(pair.house_a, env_cfg, name="variant_a")
     if getattr(ppo_cfg, "augment", False):
         from envs.augmentation import PhotometricJitter

@@ -276,7 +276,7 @@ def run_transfer_eval(
     ensure_dirs()
     pair = resolve_pair(pair_id, levels)
     model = load_frozen_model(baseline, cfg)
-    env_cfg = build_env_config(cfg, pair)
+    env_cfg = build_env_config(cfg, pair, split="eval")
 
     # Sequential evaluation (one Unity process at a time keeps memory sane).
     # Every rung reuses the same seed sequence, so episode i is the same start

@@ -191,7 +191,7 @@ class TDMPC2Adapter:
         eps_dir.mkdir(parents=True, exist_ok=True)
 
         set_seed(seed)
-        env_cfg = build_env_config(tdm_cfg, pair)
+        env_cfg = build_env_config(tdm_cfg, pair, split="train")
         env = TDMPC2THOREnv(
             make_objectnav_env(house_a_path, env_cfg, name="variant_a"),
             image_size=tdm_cfg.image_size,

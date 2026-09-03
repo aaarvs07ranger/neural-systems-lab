@@ -34,7 +34,8 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import (  # noqa: E402
-    DATA_DIR, PPOConfig, ensure_dirs, pair_dir, pair_house_path,
+    DATA_DIR, EVAL_POSE_FRACTION, POSE_HOLDOUT, POSE_SPLIT_SEED, PPOConfig,
+    ensure_dirs, pair_dir, pair_house_path,
 )
 from envs.procthor_env import ObjectNavConfig, make_objectnav_env  # noqa: E402
 
@@ -88,8 +89,15 @@ def verify_pair(
     """Run C1-C3 for one pair across the requested levels."""
     cfg = PPOConfig()
     task = json.loads((pair_dir(pair_id) / "task_config.json").read_text())
-    env_cfg = ObjectNavConfig(target_object_type=task["target_object_type"],
-                              max_steps=cfg.max_episode_steps)
+    # The eval slice, so the start poses probed here -- and the oracle
+    # distances written from them -- are exactly the ones evaluation will use.
+    env_cfg = ObjectNavConfig(
+        target_object_type=task["target_object_type"],
+        max_steps=cfg.max_episode_steps,
+        pose_split="eval" if POSE_HOLDOUT else "",
+        eval_pose_fraction=EVAL_POSE_FRACTION,
+        pose_split_seed=POSE_SPLIT_SEED,
+    )
     seeds = [cfg.eval_seed_base + i for i in range(n_seeds)]
 
     logger.info("[%s] probing house A (target=%s)", pair_id,

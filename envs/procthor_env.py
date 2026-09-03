@@ -29,6 +29,7 @@ import json
 import logging
 import math
 import os
+import random
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -120,6 +121,22 @@ class ObjectNavConfig:
     # bias is identical for every baseline, so cross-baseline claims are
     # unaffected. Raw per-seed deltas are recorded in verification.json.
     oracle_path_table: Optional[str] = None
+    # Protocol v2: hold a slice of the floor out of training so evaluation
+    # starts from places the agent has never stood.
+    #
+    # "" keeps the original protocol (every reachable cell available to both).
+    # "train" samples only from the training slice, "eval" only from the
+    # held-out slice. The split is over POSITIONS, not (position, yaw) pairs, so
+    # a held-out start is somewhere the agent never visited at all rather than
+    # somewhere it visited facing a different way.
+    #
+    # The partition is drawn from a FIXED seed, never the training seed, so it
+    # is identical across every baseline, every training seed, and every rung of
+    # the ladder -- C1 guarantees A and B share a reachable set, and the sorted
+    # order makes the draw reproducible on top of it.
+    pose_split: str = ""
+    eval_pose_fraction: float = 0.2
+    pose_split_seed: int = 20260903
 
 
 class ProcTHORObjectNavEnv(gym.Env):
@@ -157,6 +174,7 @@ class ProcTHORObjectNavEnv(gym.Env):
         # constructing the env (e.g. for space inspection) never boots Unity.
         self._controller: Optional[Any] = None
         self._reachable: Optional[List[Vec3]] = None
+        self._pose_pool: Optional[List[Vec3]] = None
 
         # Per-episode state.
         self._steps: int = 0
@@ -219,10 +237,44 @@ class ProcTHORObjectNavEnv(gym.Env):
         # Sort for a deterministic ordering independent of engine internals,
         # so seeded start-pose sampling pairs up across visual variants.
         self._reachable = sorted(positions, key=lambda p: (p["x"], p["z"]))
+        self._pose_pool = self._split_poses(self._reachable)
         logger.info(
             "[%s] controller ready: %d reachable positions, target=%s",
             self.name, len(self._reachable), self._cfg.target_object_type,
         )
+        if self._cfg.pose_split:
+            logger.info(
+                "[%s] protocol v2: sampling starts from the '%s' slice "
+                "(%d of %d cells, split seed %d)",
+                self.name, self._cfg.pose_split, len(self._pose_pool),
+                len(self._reachable), self._cfg.pose_split_seed,
+            )
+
+    def _split_poses(self, reachable: List[Vec3]) -> List[Vec3]:
+        """Partition the floor into train and held-out eval slices.
+
+        Returns the slice this env may start episodes from. An empty
+        ``pose_split`` returns everything, which is the original protocol.
+        """
+        split = self._cfg.pose_split
+        if not split:
+            return list(reachable)
+        if split not in ("train", "eval"):
+            raise ValueError(
+                f"pose_split must be '', 'train' or 'eval'; got {split!r}"
+            )
+        # A dedicated RNG, seeded by a constant: the partition must not move
+        # when the training seed changes, or seeds would not be comparable.
+        order = list(range(len(reachable)))
+        random.Random(self._cfg.pose_split_seed).shuffle(order)
+        n_eval = max(1, int(round(len(reachable) * self._cfg.eval_pose_fraction)))
+        if len(reachable) - n_eval < 1:
+            raise ValueError(
+                f"[{self.name}] eval_pose_fraction={self._cfg.eval_pose_fraction} "
+                f"leaves no training poses in a {len(reachable)}-cell house."
+            )
+        chosen = order[:n_eval] if split == "eval" else order[n_eval:]
+        return [reachable[i] for i in sorted(chosen)]
 
     # ------------------------------------------------------------------
     # Observation extraction
@@ -375,7 +427,7 @@ class ProcTHORObjectNavEnv(gym.Env):
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
         self._ensure_controller()
-        assert self._controller is not None and self._reachable is not None
+        assert self._controller is not None and self._pose_pool is not None
 
         # Sample a start pose from the (deterministically ordered) reachable
         # set. With an explicit seed this is fully reproducible AND paired
@@ -383,11 +435,11 @@ class ProcTHORObjectNavEnv(gym.Env):
         n_rot = max(1, int(round(360.0 / self._cfg.rotate_step_degrees)))
         event = None
         for _ in range(10):  # rare: a sampled cell can be transiently blocked
-            idx = int(self.np_random.integers(len(self._reachable)))
+            idx = int(self.np_random.integers(len(self._pose_pool)))
             yaw = float(self.np_random.integers(n_rot)) * self._cfg.rotate_step_degrees
             event = self._controller.step(
                 action="Teleport",
-                position=self._reachable[idx],
+                position=self._pose_pool[idx],
                 rotation={"x": 0.0, "y": yaw, "z": 0.0},
                 horizon=0.0,
                 standing=True,

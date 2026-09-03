@@ -14,19 +14,26 @@ import json
 import logging
 from typing import Any, Optional
 
-from config import PairPaths, resolve_pair
+from config import (
+    EVAL_POSE_FRACTION, POSE_HOLDOUT, POSE_SPLIT_SEED, PairPaths,
+    resolve_pair,
+)
 from envs.procthor_env import ObjectNavConfig
 
 logger = logging.getLogger("task_setup")
 
 
 def build_env_config(
-    cfg: Any, pair: Optional[PairPaths] = None,
+    cfg: Any, pair: Optional[PairPaths] = None, split: str = "",
 ) -> ObjectNavConfig:
     """Assemble the task config written by ``envs/generate_variants.py``.
 
     ``cfg`` is any baseline config dataclass; only ``max_episode_steps`` is
     read, so the episode budget stays identical across baselines.
+
+    ``split`` is "train" or "eval" and only takes effect when the protocol-v2
+    pose holdout is enabled (see ``config.POSE_HOLDOUT``); otherwise both
+    slices are the whole floor, exactly as before.
     """
     pair = pair if pair is not None else resolve_pair()
     if not pair.task_config.exists():
@@ -50,4 +57,7 @@ def build_env_config(
         target_sequence=sequence,
         max_steps=cfg.max_episode_steps,
         oracle_path_table=str(pair.oracle_table) if pair.oracle_table else None,
+        pose_split=split if POSE_HOLDOUT else "",
+        eval_pose_fraction=EVAL_POSE_FRACTION,
+        pose_split_seed=POSE_SPLIT_SEED,
     )

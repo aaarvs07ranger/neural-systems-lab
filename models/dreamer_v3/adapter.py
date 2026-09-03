@@ -173,7 +173,7 @@ class DreamerV3Adapter:
 
         tools.set_seed_everywhere(seed)
 
-        env_cfg = build_env_config(dv3_cfg, pair)
+        env_cfg = build_env_config(dv3_cfg, pair, split="train")
         thor_env = DreamerTHOREnv(
             make_objectnav_env(house_a_path, env_cfg, name="variant_a"),
             image_size=dv3_cfg.image_size,

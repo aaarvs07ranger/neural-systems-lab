@@ -24,6 +24,12 @@ conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
 
 export PYTHONUNBUFFERED=1
 export NSL_THOR_PLATFORM=cloudrendering
+# Protocol v2: evaluation starts from floor cells training never samples. The
+# grid runs with this on for all four baselines, so the oracle distance table
+# written below must be measured over the SAME held-out cells -- otherwise the
+# env finds no matching seed, falls back to measuring per house, and the L2
+# yardstick problem Option A fixed comes straight back.
+export NSL_POSE_HOLDOUT=1
 cd "${SLURM_SUBMIT_DIR}"
 
 echo "[slurm] regenerating pairs using the footprint-safe whitelist"
