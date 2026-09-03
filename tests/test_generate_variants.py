@@ -247,6 +247,29 @@ def test_rejects_unknown_level_and_missing_inputs() -> None:
         raise AssertionError(f"build_variant accepted bad args: {kwargs}")
 
 
+def test_l3_distractors_are_never_placed_on_top_of_each_other() -> None:
+    """Clutter dropped inside other clutter gets ejected onto the floor.
+
+    Placement used to anchor on an existing item +/- 0.18 m with no check
+    against the items already placed, so several could land within 25 cm of one
+    another. Physics resolves that overlap by throwing one out, usually onto the
+    floor, where it blocks navigation. pair1 L3 blocked an evaluation start pose
+    that way on 2026-09-03, with three items piled inside 25 cm.
+    """
+    from envs.generate_variants import MIN_DISTRACTOR_SPACING
+
+    for seed in range(12):
+        variant, _ = build("L3", seed=seed)
+        pts = [o["position"] for o in distractors(variant)]
+        for i, a in enumerate(pts):
+            for b in pts[i + 1:]:
+                d = ((a["x"] - b["x"]) ** 2 + (a["z"] - b["z"]) ** 2) ** 0.5
+                assert d >= MIN_DISTRACTOR_SPACING - 1e-9, (
+                    f"seed {seed}: two distractors {d:.3f} m apart, "
+                    f"minimum is {MIN_DISTRACTOR_SPACING} m"
+                )
+
+
 if __name__ == "__main__":
     fns = [(n, f) for n, f in sorted(globals().items())
            if n.startswith("test_") and callable(f)]

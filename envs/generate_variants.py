@@ -82,6 +82,14 @@ DISTRACTOR_TAG = "|distractor|"
 # Cap per surface so a sparse house never gets an impossible pile.
 MAX_DISTRACTORS_PER_HOST = 4
 
+# Minimum horizontal separation between two placed distractors, in metres.
+# Two objects dropped closer than this interpenetrate, and the physics engine
+# resolves the overlap by ejecting one -- usually onto the floor, where it
+# blocks navigation. Slightly wider than the 0.25 m navigation grid so an
+# ejected item cannot land between two placed ones either.
+MIN_DISTRACTOR_SPACING = 0.35
+PLACEMENT_ATTEMPTS = 25       # tries to find a clear spot before giving up
+
 
 def _iter_objects(objects: Sequence[Dict[str, Any]]):
     """Yield every object and nested child in stable document order.
@@ -529,18 +537,43 @@ def _apply_l3(
     # Shuffle once for variety, then cycle: deterministic given the seed.
     order = list(candidates)
     rng.shuffle(order)
+    # Every position placed so far, so new clutter is not dropped inside old
+    # clutter. Objects that interpenetrate get ejected when physics settles, and
+    # an ejected object lands on the floor where it blocks cells the agent needs
+    # -- which is how pair1 L3 came to block an evaluation start pose on
+    # 2026-09-03 with all three of its items piled within 25 cm of each other.
+    placed: List[Dict[str, float]] = []
+    skipped_crowded = 0
+
+    def _far_enough(pos: Dict[str, float]) -> bool:
+        return all((pos["x"] - q["x"]) ** 2 + (pos["z"] - q["z"]) ** 2
+                   >= MIN_DISTRACTOR_SPACING ** 2 for q in placed)
+
     for i in range(n_to_place):
         obj_type = order[i % len(order)]
         assets = asset_pool.get(obj_type, [])
         if not assets:
             continue
-        host = rng.choice(hosts)
-        anchor_child = rng.choice(host["children"])
-        position = dict(anchor_child["position"])
-        # Offset within the receptacle surface so distractors do not spawn
-        # exactly on top of an existing item.
-        position["x"] = round(position["x"] + rng.uniform(-0.18, 0.18), 6)
-        position["z"] = round(position["z"] + rng.uniform(-0.18, 0.18), 6)
+        position = None
+        for _ in range(PLACEMENT_ATTEMPTS):
+            host = rng.choice(hosts)
+            anchor_child = rng.choice(host["children"])
+            trial = dict(anchor_child["position"])
+            # Offset within the receptacle surface so distractors do not spawn
+            # exactly on top of an existing item.
+            trial["x"] = round(trial["x"] + rng.uniform(-0.18, 0.18), 6)
+            trial["z"] = round(trial["z"] + rng.uniform(-0.18, 0.18), 6)
+            if _far_enough(trial):
+                position = trial
+                break
+        if position is None:
+            # A crowded house simply gets less clutter. Forcing the item in
+            # would place it inside another one, and the physics engine would
+            # then decide where it ends up -- which is not a decision this
+            # benchmark can afford to delegate.
+            skipped_crowded += 1
+            continue
+        placed.append(position)
         distractor = {
             "assetId": rng.choice(assets),
             "id": f"{obj_type}{DISTRACTOR_TAG}{i}",
@@ -552,6 +585,12 @@ def _apply_l3(
         added.append({"id": distractor["id"], "type": obj_type,
                       "asset": distractor["assetId"], "host": host.get("id"),
                       "novel_type": obj_type in absent})
+    if skipped_crowded:
+        report.setdefault("l3_notes", []).append(
+            f"skipped {skipped_crowded} distractor(s): no spot at least "
+            f"{MIN_DISTRACTOR_SPACING} m from the clutter already placed")
+        logger.info("L3: skipped %d distractor(s) for lack of spacing",
+                    skipped_crowded)
     report["l3_distractors"] = added
     logger.info("L3: added %d distractors (%d of types absent from A)",
                 len(added), sum(1 for d in added if d["novel_type"]))

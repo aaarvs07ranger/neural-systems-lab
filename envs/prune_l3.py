@@ -61,6 +61,11 @@ logger = logging.getLogger("prune_l3")
 # defects, so a flaky object is treated as a defect rather than a coin flip.
 STABILITY_TRIALS = 3
 
+# How far a distractor may move between two loads and still count as "in one
+# place", in metres. Well under the 0.25 m navigation grid, so anything that
+# could change which cell it occupies is caught.
+SETTLE_TOLERANCE = 0.02
+
 House = Dict[str, Any]
 
 
@@ -78,6 +83,44 @@ def _pinned_poses(pair_id: str) -> List[Dict[str, Any]]:
              "rotation": e.get("start_rotation", 0.0)}
             for s, e in sorted(table.items())
             if "start_position" in e]
+
+
+def _settled_positions(controller, house: House) -> Dict[str, Dict[str, float]]:
+    """Where each distractor actually comes to rest after physics settles."""
+    controller.reset(scene=house)
+    out = {}
+    for obj in controller.last_event.metadata["objects"]:
+        if DISTRACTOR_TAG in str(obj.get("objectId", "")) \
+                or DISTRACTOR_TAG in str(obj.get("name", "")):
+            out[str(obj.get("objectId"))] = dict(obj["position"])
+    return out
+
+
+def _unstable_distractors(controller, house: House, trials: int) -> Dict[str, float]:
+    """Distractors that do not land in the same place on every load.
+
+    A benchmark object has to be in one place. An item balanced on an edge is
+    not: it stays put on some loads and falls on others, and whether it blocks a
+    floor cell then becomes a coin flip that no amount of re-checking can
+    settle. Rather than sampling that coin more times, drop the object.
+
+    Returns {objectId: largest distance it moved between loads, in metres}.
+    """
+    readings = [_settled_positions(controller, house) for _ in range(max(2, trials))]
+    ids = set().union(*[set(r) for r in readings]) if readings else set()
+    drift = {}
+    for oid in ids:
+        pts = [r[oid] for r in readings if oid in r]
+        if len(pts) != len(readings):
+            drift[oid] = float("inf")        # present on some loads, not others
+            continue
+        worst = max(
+            ((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2 + (a["z"] - b["z"]) ** 2) ** 0.5
+            for a in pts for b in pts
+        )
+        if worst > SETTLE_TOLERANCE:
+            drift[oid] = worst
+    return drift
 
 
 def _blocked_poses(controller, poses: List[Dict[str, Any]]) -> List[str]:
@@ -148,8 +191,27 @@ def prune_pair(
     reference = _reachable(controller, house_a)
     poses = _pinned_poses(pair_id)
     candidates = _distractor_ids(house_l3)
+
+    # Drop anything that does not land in the same place every time, BEFORE
+    # asking what blocks what. An unstable object makes every later measurement
+    # a coin flip, so removing it first is what makes the rest meaningful.
+    drift = _unstable_distractors(controller, house_l3, STABILITY_TRIALS)
+    # THOR's runtime objectId is not always the house-JSON id verbatim, so match
+    # on the unique distractor tag both share.
     dropped: List[Dict[str, Any]] = []
-    keep = set(candidates)
+    unstable = set()
+    for cand in sorted(candidates):
+        hits = [v for k, v in drift.items() if cand in k or k in cand]
+        if not hits:
+            continue
+        unstable.add(cand)
+        worst = min(hits)
+        dropped.append({"id": cand, "max_drift_m": None if worst == float("inf")
+                        else round(worst, 4),
+                        "reason": "does not settle in the same place on every load"})
+        logger.info("[%s] dropping %s (moves up to %s m between loads)",
+                    pair_id, cand, dropped[-1]["max_drift_m"])
+    keep = set(candidates) - unstable
 
     def defects(drop: Set[str], trials: int = 1) -> Tuple[Set, Set, List[str]]:
         """Floor cells lost, floor cells gained, and pinned poses blocked.
@@ -241,6 +303,8 @@ def prune_pair(
         "n_kept": len(keep),
         "kept": sorted(keep),
         "dropped": dropped,
+        "n_unstable_dropped": len(unstable),
+        "settle_tolerance_m": SETTLE_TOLERANCE,
         "n_reachable_reference": len(reference),
         "n_pinned_poses_checked": len(poses),
         "stability_trials": STABILITY_TRIALS,
