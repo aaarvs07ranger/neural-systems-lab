@@ -41,7 +41,69 @@ def pair_dir(pair_id: str) -> Path:
 def pair_house_path(pair_id: str, level: str) -> Path:
     """Path to one house of one pair. ``level='A'`` is the training house."""
     return pair_dir(pair_id) / ("a.json" if level == "A" else f"b_{level}.json")
+
+
 TASK_CONFIG_PATH: Path = DATA_DIR / "task_config.json"  # target object, seeds, provenance
+
+# Severity rungs a transfer evaluation walks, in increasing order.
+EVAL_LEVELS: Tuple[str, ...] = ("L1", "L2", "L3")
+
+
+@dataclass(frozen=True)
+class PairPaths:
+    """Every file one grid cell needs, resolved from a pair id.
+
+    The agent only ever TRAINS in ``house_a``; the severity rung changes which
+    house is EVALUATED. One trained model therefore serves the whole ladder,
+    which is why the grid is 100 training runs and not 300.
+    """
+
+    pair_id: str                              # "pair0"; "" means the legacy flat layout
+    house_a: Path                             # the training house
+    task_config: Path                         # target object type, itinerary, provenance
+    oracle_table: Optional[Path]              # per-seed distances measured in house A
+    eval_houses: Tuple[Tuple[str, Path], ...]  # ("A", ...), ("L1", ...), ...
+
+
+def resolve_pair(
+    pair_id: Optional[str] = None, levels: Optional[Tuple[str, ...]] = None,
+) -> PairPaths:
+    """Locate one house pair's files.
+
+    ``pair_id=None`` falls back to the ``NSL_PAIR`` environment variable (which
+    is how slurm array tasks select their cell), and an empty value falls back
+    to the legacy flat ``data/house_{a,b}.json`` layout. pair0 is written to
+    both layouts byte-identically, so every command that worked before this
+    existed still resolves the same bytes and reproduces the same numbers.
+    """
+    pair_id = pair_id if pair_id is not None else os.environ.get("NSL_PAIR", "")
+    levels = tuple(levels) if levels is not None else EVAL_LEVELS
+
+    if not pair_id:
+        houses = [("A", HOUSE_A_PATH)]
+        # The flat layout only ever held L1; higher rungs live in data/pairs/.
+        if "L1" in levels:
+            houses.append(("L1", HOUSE_B_PATH))
+        return PairPaths(
+            pair_id="", house_a=HOUSE_A_PATH, task_config=TASK_CONFIG_PATH,
+            oracle_table=_existing(DATA_DIR / "oracle_paths.json"),
+            eval_houses=tuple(houses),
+        )
+
+    d = pair_dir(pair_id)
+    houses = [("A", pair_house_path(pair_id, "A"))]
+    houses += [(lvl, pair_house_path(pair_id, lvl)) for lvl in levels]
+    return PairPaths(
+        pair_id=pair_id,
+        house_a=pair_house_path(pair_id, "A"),
+        task_config=d / "task_config.json",
+        oracle_table=_existing(d / "oracle_paths.json"),
+        eval_houses=tuple(houses),
+    )
+
+
+def _existing(path: Path) -> Optional[Path]:
+    return path if path.exists() else None
 
 
 def ensure_dirs() -> None:

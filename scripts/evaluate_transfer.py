@@ -1,15 +1,22 @@
 """Zero-shot transfer evaluation: trained policy, variant A vs variant B.
 
-Loads the trained model (no weight updates of any kind), evaluates it with a
-deterministic policy on:
+Loads the trained model (no weight updates of any kind) and evaluates it with a
+deterministic policy on the training house and on every rung of the severity
+ladder:
 
-  1. variant A (the training visuals)  — in-domain reference
-  2. variant B (re-skinned visuals)    — zero-shot transfer
+  A   variant A (the training visuals)           — in-domain reference
+  L1  materials + lighting + skybox              — mild appearance shift
+  L2  L1 + object-appearance swaps               — same objectType, new asset
+  L3  L2 + distractor clutter                    — irrelevant objects added
 
-using the SAME episode seed sequence on both variants. Because A and B share
-identical geometry, seeded resets produce paired start poses, so any metric
-gap is attributable to appearance alone. This gap is the empirical signature
-of the visual-binding problem we are quantifying.
+using the SAME episode seed sequence on all of them. The rungs are cumulative
+and the geometry never changes, so seeded resets produce paired start poses and
+any metric gap is attributable to appearance alone. Those gaps are the
+empirical signature of the visual-binding problem we are quantifying.
+
+Walking the whole ladder inside ONE evaluation is what keeps the grid at 100
+training runs instead of 300: the agent only ever trains in house A, so a single
+trained model serves every rung.
 
 Outputs:
     results/tables/<baseline>_transfer_episodes.csv   per-episode metrics
@@ -29,7 +36,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
@@ -45,17 +52,18 @@ if "--smoke" in sys.argv and "NSL_RESULTS_DIR" not in os.environ:
     print(f"[smoke] results redirected to {_smoke_results} (gitignored)")
 
 from config import (  # noqa: E402
-    HOUSE_A_PATH,
-    HOUSE_B_PATH,
+    EVAL_LEVELS,
     PLOTS_DIR,
     TABLES_DIR,
     PPOConfig,
     SmokePPOConfig,
     ensure_dirs,
     get_device,
+    resolve_pair,
 )
 from envs.procthor_env import ObjectNavConfig, make_objectnav_env  # noqa: E402
-from scripts.train_ppo import build_env_config, final_model_path  # noqa: E402
+from envs.task_setup import build_env_config  # noqa: E402
+from scripts.train_ppo import final_model_path  # noqa: E402
 
 logger = logging.getLogger("evaluate_transfer")
 
@@ -133,25 +141,25 @@ def summarize(df: "pd.DataFrame") -> Dict[str, float]:
 
 
 def plot_transfer(
-    summary_a: Dict[str, float], summary_b: Dict[str, float], out_path: Path,
-    baseline: str,
+    summaries: Dict[str, Dict[str, float]], out_path: Path, baseline: str,
+    pair_id: str = "",
 ) -> None:
-    """Grouped bars for success rate & SPL (shared 0-1 axis), ep-length panel."""
+    """Severity ladder: one bar per rung for success & SPL, plus ep-length."""
     import matplotlib
 
     matplotlib.use("Agg")  # headless rendering
     import matplotlib.pyplot as plt
     import numpy as np
 
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(8.6, 3.8), width_ratios=[2, 1], facecolor=COLOR_SURFACE
-    )
-    labels = ["Success rate", "SPL"]
-    vals_a = [summary_a["success_rate"], summary_a["spl"]]
-    vals_b = [summary_b["success_rate"], summary_b["spl"]]
-    x = np.arange(len(labels))
-    width = 0.32  # thin marks with a visible gap between the pair
+    levels = [lvl for lvl in ("A", "L1", "L2", "L3") if lvl in summaries]
+    # Ordered light -> dark so the figure reads as increasing severity even in
+    # grayscale; A keeps the reference blue it has had since the first result.
+    colors = {"A": COLOR_TRAIN, "L1": "#6fd3ab", "L2": COLOR_TRANSFER,
+              "L3": "#0f7a55"}
 
+    fig, (ax1, ax2) = plt.subplots(
+        1, 2, figsize=(9.4, 3.9), width_ratios=[2, 1], facecolor=COLOR_SURFACE
+    )
     for ax in (ax1, ax2):
         ax.set_facecolor(COLOR_SURFACE)
         ax.grid(axis="y", color=COLOR_GRID, linewidth=0.8, zorder=0)
@@ -160,22 +168,31 @@ def plot_transfer(
         ax.spines["bottom"].set_color(COLOR_BASELINE)
         ax.tick_params(colors=COLOR_MUTED, labelcolor=COLOR_INK, length=0)
 
-    b1 = ax1.bar(x - width / 2 - 0.01, vals_a, width, color=COLOR_TRAIN,
-                 label="Train visuals (A)", zorder=3)
-    b2 = ax1.bar(x + width / 2 + 0.01, vals_b, width, color=COLOR_TRANSFER,
-                 label="Zero-shot visuals (B)", zorder=3)
-    ax1.set_xticks(x, labels)
-    ax1.set_ylim(0, 1.0)
-    ax1.set_title(f"{baseline.upper()}: zero-shot visual transfer",
+    metrics = [("success_rate", "Success rate"), ("spl", "SPL")]
+    x = np.arange(len(metrics))
+    width = min(0.28, 0.8 / max(len(levels), 1))
+    offset0 = -width * (len(levels) - 1) / 2
+    for i, lvl in enumerate(levels):
+        vals = [summaries[lvl][m] for m, _ in metrics]
+        bars = ax1.bar(x + offset0 + i * width, vals, width * 0.92,
+                       color=colors.get(lvl, COLOR_TRANSFER),
+                       label=LEVEL_LABELS.get(lvl, lvl), zorder=3)
+        # Direct value labels (relief rule: the aqua series is sub-3:1 on this
+        # surface, so numbers wear ink rather than relying on the fill).
+        ax1.bar_label(bars, fmt="%.2f", color=COLOR_INK, fontsize=8, padding=2)
+    ax1.set_xticks(x, [label for _, label in metrics])
+    ax1.set_ylim(0, 1.08)
+    title = f"{baseline.upper()}: zero-shot transfer across the severity ladder"
+    ax1.set_title(title + (f"  ({pair_id})" if pair_id else ""),
                   color=COLOR_INK, fontsize=11, loc="left")
-    # Direct value labels (relief rule for the aqua series; text wears ink).
-    for bars in (b1, b2):
-        ax1.bar_label(bars, fmt="%.2f", color=COLOR_INK, fontsize=9, padding=2)
-    ax1.legend(frameon=False, fontsize=9, labelcolor=COLOR_INK, loc="upper right")
+    ax1.legend(frameon=False, fontsize=8, labelcolor=COLOR_INK,
+               loc="upper right", ncol=1)
 
-    lens = [summary_a["mean_episode_length"], summary_b["mean_episode_length"]]
-    b3 = ax2.bar([0, 1], lens, 0.5, color=[COLOR_TRAIN, COLOR_TRANSFER], zorder=3)
-    ax2.set_xticks([0, 1], ["A", "B"])
+    lens = [summaries[lvl]["mean_episode_length"] for lvl in levels]
+    b3 = ax2.bar(np.arange(len(levels)), lens, 0.55,
+                 color=[colors.get(lvl, COLOR_TRANSFER) for lvl in levels],
+                 zorder=3)
+    ax2.set_xticks(np.arange(len(levels)), levels)
     ax2.set_title("Mean episode length", color=COLOR_INK, fontsize=11, loc="left")
     ax2.bar_label(b3, fmt="%.0f", color=COLOR_INK, fontsize=9, padding=2)
 
@@ -230,68 +247,124 @@ def load_frozen_model(baseline: str, cfg: Any) -> Any:
     raise NotImplementedError(f"no frozen-model loader for baseline '{baseline}'")
 
 
-def run_transfer_eval(cfg: Any, baseline: str = "ppo") -> Dict[str, Any]:
-    """Full A/B evaluation of the saved model; writes tables + plot.
+# Human-readable label per rung, used in tables and the figure legend.
+LEVEL_LABELS = {
+    "A": "A (train visuals)",
+    "L1": "B_L1 (materials + lighting)",
+    "L2": "B_L2 (+ object appearance)",
+    "L3": "B_L3 (+ distractors)",
+}
+
+
+def run_transfer_eval(
+    cfg: Any,
+    baseline: str = "ppo",
+    pair_id: Optional[str] = None,
+    levels: Optional[Tuple[str, ...]] = None,
+) -> Dict[str, Any]:
+    """Evaluate the saved model on house A and every severity rung.
 
     ``cfg`` is the baseline's config dataclass (PPOConfig, DreamerV3Config,
     ...); only the shared protocol fields are used here: ``eval_episodes``,
-    ``eval_seed_base``, ``max_episode_steps``.
+    ``eval_seed_base``, ``max_episode_steps``. Writes tables + plot.
+
+    Rungs that have no house on disk are skipped with a warning rather than
+    failing, so a pair that only has L1 generated still evaluates.
     """
     import pandas as pd
 
     ensure_dirs()
+    pair = resolve_pair(pair_id, levels)
     model = load_frozen_model(baseline, cfg)
-    env_cfg = build_env_config(cfg)
+    env_cfg = build_env_config(cfg, pair)
 
     # Sequential evaluation (one Unity process at a time keeps memory sane).
-    df_a = evaluate_on_house(
-        model, HOUSE_A_PATH, env_cfg, cfg.eval_episodes,
-        cfg.eval_seed_base, name="variant_a",
-    )
-    df_b = evaluate_on_house(
-        model, HOUSE_B_PATH, env_cfg, cfg.eval_episodes,
-        cfg.eval_seed_base, name="variant_b",
-    )
+    # Every rung reuses the same seed sequence, so episode i is the same start
+    # pose everywhere and the comparison stays paired.
+    frames, summaries = [], {}
+    for level, house_path in pair.eval_houses:
+        if not house_path.exists():
+            logger.warning("skipping %s — %s not found", level, house_path)
+            continue
+        df = evaluate_on_house(
+            model, house_path, env_cfg, cfg.eval_episodes,
+            cfg.eval_seed_base, name=LEVEL_LABELS.get(level, level),
+        )
+        df.insert(0, "level", level)
+        frames.append(df)
+        summaries[level] = summarize(df)
 
-    episodes = pd.concat([df_a, df_b], ignore_index=True)
+    if "A" not in summaries:
+        raise FileNotFoundError(
+            f"house A not found for pair '{pair.pair_id or 'legacy'}' — "
+            "nothing to compare against."
+        )
+
+    episodes = pd.concat(frames, ignore_index=True)
     episodes.to_csv(TABLES_DIR / f"{baseline}_transfer_episodes.csv", index=False)
 
-    summary_a, summary_b = summarize(df_a), summarize(df_b)
-    drop_abs = summary_a["success_rate"] - summary_b["success_rate"]
-    drop_rel = drop_abs / summary_a["success_rate"] if summary_a["success_rate"] > 0 else float("nan")
-    spl_drop_abs = summary_a["spl"] - summary_b["spl"]
+    # Every rung is scored against A, the in-domain reference.
+    base = summaries["A"]
+    rows, result_levels = [], {}
+    for level, s in summaries.items():
+        drop_abs = base["success_rate"] - s["success_rate"]
+        spl_drop_abs = base["spl"] - s["spl"]
+        rows.append({
+            "level": level,
+            "variant": LEVEL_LABELS.get(level, level),
+            **s,
+            "success_drop_abs": drop_abs,
+            "success_drop_rel": (drop_abs / base["success_rate"]
+                                 if base["success_rate"] > 0 else float("nan")),
+            "spl_drop_abs": spl_drop_abs,
+            "spl_drop_rel": (spl_drop_abs / base["spl"]
+                             if base["spl"] > 0 else float("nan")),
+        })
+        result_levels[level] = rows[-1]
 
-    summary = pd.DataFrame(
-        [
-            {"variant": "A (train visuals)", **summary_a},
-            {"variant": "B (zero-shot visuals)", **summary_b},
-        ]
-    )
+    summary = pd.DataFrame(rows)
     summary_path = TABLES_DIR / f"{baseline}_transfer_summary"
     summary.to_csv(summary_path.with_suffix(".csv"), index=False)
 
     md_lines = [
-        f"# {baseline.upper()} zero-shot visual transfer",
+        f"# {baseline.upper()} zero-shot visual transfer"
+        + (f" — {pair.pair_id}" if pair.pair_id else ""),
         "",
-        summary.to_markdown(index=False, floatfmt=".3f"),
+        summary.drop(columns=["level"]).to_markdown(index=False, floatfmt=".3f"),
         "",
-        f"- **Success-rate drop (A - B): {drop_abs:.3f} absolute"
-        + (f", {drop_rel:.1%} relative**" if drop_rel == drop_rel else "**"),
-        f"- **SPL drop (A - B): {spl_drop_abs:.3f} absolute**",
+    ]
+    for level in [lvl for lvl in summaries if lvl != "A"]:
+        r = result_levels[level]
+        md_lines.append(
+            f"- **{level}: success drop {r['success_drop_abs']:.3f} absolute"
+            + (f", {r['success_drop_rel']:.1%} relative"
+               if r["success_drop_rel"] == r["success_drop_rel"] else "")
+            + f" · SPL drop {r['spl_drop_abs']:.3f} absolute**"
+        )
+    md_lines += [
         "",
         "_Same frozen policy, same episode seeds (paired starts), no fine-tuning._",
     ]
     summary_path.with_suffix(".md").write_text("\n".join(md_lines) + "\n")
     logger.info("wrote %s.{csv,md}", summary_path)
 
-    plot_transfer(summary_a, summary_b, PLOTS_DIR / f"{baseline}_transfer.png", baseline)
+    plot_transfer(summaries, PLOTS_DIR / f"{baseline}_transfer.png", baseline,
+                  pair.pair_id)
 
+    # Backwards-compatible top-level keys: callers (main.py, older scripts) have
+    # always read the A -> L1 numbers, which stay exactly where they were.
+    headline = result_levels.get("L1", result_levels[
+        next(iter(k for k in result_levels if k != "A"), "A")])
     result = {
-        "summary_a": summary_a,
-        "summary_b": summary_b,
-        "success_drop_abs": drop_abs,
-        "success_drop_rel": drop_rel,
-        "spl_drop_abs": spl_drop_abs,
+        "pair_id": pair.pair_id,
+        "levels": result_levels,
+        "summary_a": base,
+        "summary_b": {k: headline[k] for k in
+                      ("success_rate", "spl", "mean_episode_length",
+                       "mean_total_reward", "episodes")},
+        "success_drop_abs": headline["success_drop_abs"],
+        "success_drop_rel": headline["success_drop_rel"],
+        "spl_drop_abs": headline["spl_drop_abs"],
     }
     logger.info("transfer result: %s", json.dumps(result, indent=2))
     return result
@@ -304,6 +377,12 @@ def main() -> None:
                         default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")
+    parser.add_argument("--pair", default=None,
+                        help="house pair id (e.g. pair0); default = $NSL_PAIR, "
+                             "else the legacy flat data/house_*.json layout")
+    parser.add_argument("--levels", default=None,
+                        help="comma-separated severity rungs to evaluate "
+                             f"(default {','.join(EVAL_LEVELS)})")
     parser.add_argument("--smoke", action="store_true",
                         help="tiny run to verify pipeline mechanics")
     args = parser.parse_args()
@@ -330,7 +409,9 @@ def main() -> None:
     cfg = config_classes[(args.baseline, args.smoke)]()
     if args.episodes is not None:
         cfg = type(cfg)(**{**cfg.__dict__, "eval_episodes": args.episodes})
-    run_transfer_eval(cfg, baseline=args.baseline)
+    levels = (tuple(args.levels.split(",")) if args.levels else None)
+    run_transfer_eval(cfg, baseline=args.baseline, pair_id=args.pair,
+                      levels=levels)
 
 
 if __name__ == "__main__":

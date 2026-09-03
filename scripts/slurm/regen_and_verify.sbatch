@@ -28,5 +28,7 @@ cd "${SLURM_SUBMIT_DIR}"
 
 echo "[slurm] regenerating pairs using the footprint-safe whitelist"
 python envs/generate_variants.py --pairs 5
+echo "[slurm] pruning L3 distractors that block floor"
+python envs/prune_l3.py
 echo "[slurm] running the C1-C3 verification gate"
 python envs/verify_pairs.py

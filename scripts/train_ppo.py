@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -29,15 +28,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import (  # noqa: E402
     CHECKPOINTS_DIR,
-    HOUSE_A_PATH,
     LOGS_DIR,
-    TASK_CONFIG_PATH,
     PPOConfig,
     SmokePPOConfig,
     ensure_dirs,
     get_device,
+    resolve_pair,
 )
 from envs.procthor_env import ObjectNavConfig, make_objectnav_env  # noqa: E402
+from envs.task_setup import build_env_config as _build_env_config  # noqa: E402
 
 logger = logging.getLogger("train_ppo")
 
@@ -52,32 +51,16 @@ def final_model_path(baseline_name: str = "ppo") -> Path:
     return ckpt_dir(baseline_name) / "ppo_final"
 
 
-def build_env_config(ppo_cfg: PPOConfig) -> ObjectNavConfig:
-    """Assemble the task config saved by envs/generate_variants.py."""
-    if not TASK_CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"{TASK_CONFIG_PATH} not found — run `python envs/generate_variants.py` "
-            "(or `python main.py --stage generate`) first."
-        )
-    task = json.loads(TASK_CONFIG_PATH.read_text())
-    # T2 (sequential ObjectNav) is opt-in per house: a "target_sequence" key in
-    # the task config turns the task into an ordered itinerary. Absent, this is
-    # T1 and behaves exactly as it always has.
-    sequence = tuple(task.get("target_sequence", ()) or ())
-    # One oracle distance table per pair, measured in house A, shared by every
-    # variant so A and B are scored with the same yardstick (see
-    # ObjectNavConfig.oracle_path_table). Absent during training in A, where the
-    # env simply measures its own -- which is the same number by construction.
-    oracle = TASK_CONFIG_PATH.parent / "oracle_paths.json"
-    return ObjectNavConfig(
-        target_object_type=task["target_object_type"],
-        target_sequence=sequence,
-        max_steps=ppo_cfg.max_episode_steps,
-        oracle_path_table=str(oracle) if oracle.exists() else None,
-    )
+def build_env_config(ppo_cfg: PPOConfig, pair=None) -> ObjectNavConfig:
+    """Re-exported from envs.task_setup (the one canonical assembly).
+
+    Kept here because scripts/evaluate_transfer.py has always imported it from
+    this module.
+    """
+    return _build_env_config(ppo_cfg, pair)
 
 
-def train(ppo_cfg: PPOConfig) -> Path:
+def train(ppo_cfg: PPOConfig, pair=None) -> Path:
     """Run PPO training on variant A; returns the final model path."""
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import CheckpointCallback
@@ -90,8 +73,9 @@ def train(ppo_cfg: PPOConfig) -> Path:
     ckpt.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    env_cfg = build_env_config(ppo_cfg)
-    env = make_objectnav_env(HOUSE_A_PATH, env_cfg, name="variant_a")
+    pair = pair if pair is not None else resolve_pair()
+    env_cfg = build_env_config(ppo_cfg, pair)
+    env = make_objectnav_env(pair.house_a, env_cfg, name="variant_a")
     if getattr(ppo_cfg, "augment", False):
         from envs.augmentation import PhotometricJitter
 

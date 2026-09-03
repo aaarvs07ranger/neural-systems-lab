@@ -28,7 +28,6 @@ Design notes
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -45,11 +44,11 @@ import numpy as np
 from config import (
     CHECKPOINTS_DIR,
     LOGS_DIR,
-    TASK_CONFIG_PATH,
     TDMPC2Config,
     get_device,
 )
-from envs.procthor_env import ObjectNavConfig, make_objectnav_env
+from envs.procthor_env import make_objectnav_env
+from envs.task_setup import build_env_config
 from models.td_mpc2.thor_env import TDMPC2THOREnv, frame_to_chw
 
 logger = logging.getLogger("tdmpc2_adapter")
@@ -80,19 +79,6 @@ def _tdmpc2_device() -> str:
         )
         return "cpu"
     return device
-
-
-def _build_env_config(tdm_cfg: TDMPC2Config) -> ObjectNavConfig:
-    """Same task assembly as the PPO/DreamerV3 paths (identical protocol)."""
-    if not TASK_CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"{TASK_CONFIG_PATH} not found — run `python main.py --stage generate` first."
-        )
-    task = json.loads(TASK_CONFIG_PATH.read_text())
-    return ObjectNavConfig(
-        target_object_type=task["target_object_type"],
-        max_steps=tdm_cfg.max_episode_steps,
-    )
 
 
 def _make_tdmpc2_config(tdm_cfg: TDMPC2Config, num_actions: int) -> _Cfg:
@@ -187,7 +173,8 @@ class TDMPC2Adapter:
     # ------------------------------------------------------------------
     # Training (mirrors vendored trainer/online_trainer.py, episodic mode)
     # ------------------------------------------------------------------
-    def train(self, house_a_path: Path, total_timesteps: int, seed: int) -> Path:
+    def train(self, house_a_path: Path, total_timesteps: int, seed: int,
+              pair=None) -> Path:
         import torch
         from tensordict.tensordict import TensorDict
 
@@ -204,7 +191,7 @@ class TDMPC2Adapter:
         eps_dir.mkdir(parents=True, exist_ok=True)
 
         set_seed(seed)
-        env_cfg = _build_env_config(tdm_cfg)
+        env_cfg = build_env_config(tdm_cfg, pair)
         env = TDMPC2THOREnv(
             make_objectnav_env(house_a_path, env_cfg, name="variant_a"),
             image_size=tdm_cfg.image_size,
@@ -355,7 +342,7 @@ class TDMPC2Adapter:
     def load(self, model_path: Path) -> None:
         from models.td_mpc2.vendor.tdmpc2 import TDMPC2
 
-        env_cfg = _build_env_config(self._cfg)
+        env_cfg = build_env_config(self._cfg)
         cfg = _make_tdmpc2_config(self._cfg, len(env_cfg.actions))
         agent = TDMPC2(cfg)
         agent.load(Path(model_path))

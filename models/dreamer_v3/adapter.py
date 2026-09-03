@@ -26,7 +26,6 @@ TensorBoard training curves land in ``results/logs/dreamerv3``
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -43,11 +42,11 @@ import yaml
 from config import (
     CHECKPOINTS_DIR,
     LOGS_DIR,
-    TASK_CONFIG_PATH,
     DreamerV3Config,
     get_device,
 )
-from envs.procthor_env import ObjectNavConfig, make_objectnav_env
+from envs.procthor_env import make_objectnav_env
+from envs.task_setup import build_env_config
 from models.dreamer_v3.thor_env import DreamerTHOREnv
 
 logger = logging.getLogger("dreamerv3_adapter")
@@ -60,19 +59,6 @@ FINAL_MODEL_PATH = DV3_CKPT_DIR / "dreamer_final.pt"
 # Fixed discrete-action recipe from upstream configs.yaml (atari100k/crafter).
 _DISCRETE_OVERRIDES = {"actor": {"dist": "onehot", "std": "none"},
                        "imag_gradient": "reinforce"}
-
-
-def _build_env_config(dv3_cfg: DreamerV3Config) -> ObjectNavConfig:
-    """Same task assembly as scripts/train_ppo.py (identical protocol)."""
-    if not TASK_CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"{TASK_CONFIG_PATH} not found — run `python main.py --stage generate` first."
-        )
-    task = json.loads(TASK_CONFIG_PATH.read_text())
-    return ObjectNavConfig(
-        target_object_type=task["target_object_type"],
-        max_steps=dv3_cfg.max_episode_steps,
-    )
 
 
 def _coerce_scalars(node: Any) -> Any:
@@ -162,7 +148,8 @@ class DreamerV3Adapter:
     # ------------------------------------------------------------------
     # Training (mirrors vendored dreamer.py:main, single env, no interleaved eval)
     # ------------------------------------------------------------------
-    def train(self, house_a_path: Path, total_timesteps: int, seed: int) -> Path:
+    def train(self, house_a_path: Path, total_timesteps: int, seed: int,
+              pair=None) -> Path:
         import torch
 
         from models.dreamer_v3.vendor import tools
@@ -186,7 +173,7 @@ class DreamerV3Adapter:
 
         tools.set_seed_everywhere(seed)
 
-        env_cfg = _build_env_config(dv3_cfg)
+        env_cfg = build_env_config(dv3_cfg, pair)
         thor_env = DreamerTHOREnv(
             make_objectnav_env(house_a_path, env_cfg, name="variant_a"),
             image_size=dv3_cfg.image_size,
@@ -278,7 +265,7 @@ class DreamerV3Adapter:
         from models.dreamer_v3.vendor import tools
         from models.dreamer_v3.vendor.dreamer import Dreamer
 
-        env_cfg = _build_env_config(self._cfg)
+        env_cfg = build_env_config(self._cfg)
         num_actions = len(env_cfg.actions)
         config = _make_dreamer_config(self._cfg, num_actions)
 

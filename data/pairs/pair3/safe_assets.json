@@ -1,0 +1,428 @@
+{
+  "pair_id": "pair3",
+  "target_object_type": "Bed",
+  "reference_reachable": 460,
+  "n_candidates_tested": 184,
+  "n_safe": 143,
+  "target_swappable": true,
+  "objects": {
+    "Bed|2|0|0": {
+      "type": "Bed",
+      "original": "Bed_19",
+      "safe": [
+        "Bed_1"
+      ],
+      "unsafe": [
+        "Bed_12",
+        "Bed_13",
+        "Bed_14",
+        "Bed_18_1",
+        "Bed_18_2",
+        "Bed_2",
+        "Bed_20",
+        "Bed_23",
+        "Bed_26_1",
+        "Bed_26_2",
+        "Bed_28",
+        "Bed_3",
+        "Bed_30",
+        "Bed_4",
+        "Bed_5",
+        "Bed_7",
+        "Bed_8",
+        "Bed_9",
+        "RoboTHOR_bed_grankulla",
+        "RoboTHOR_bed_hemnes",
+        "RoboTHOR_bed_kritter",
+        "RoboTHOR_bed_tarva_v",
+        "RoboTHOR_hemnes_day_bed"
+      ]
+    },
+    "Pillow|2|0|2": {
+      "type": "Pillow",
+      "original": "pillow_30",
+      "safe": [
+        "RoboTHOR_pillow_sanglarka_1_v",
+        "pillow_1",
+        "pillow_12",
+        "pillow_13",
+        "pillow_16",
+        "pillow_17"
+      ],
+      "unsafe": []
+    },
+    "Pillow|2|0|1": {
+      "type": "Pillow",
+      "original": "pillow_30",
+      "safe": [
+        "RoboTHOR_pillow_sanglarka_1_v",
+        "pillow_1",
+        "pillow_12",
+        "pillow_13",
+        "pillow_16",
+        "pillow_17"
+      ],
+      "unsafe": []
+    },
+    "AlarmClock|surface|2|13": {
+      "type": "AlarmClock",
+      "original": "Alarm_Clock_19",
+      "safe": [
+        "Alarm_Clock_10",
+        "Alarm_Clock_11",
+        "Alarm_Clock_14",
+        "Alarm_Clock_15",
+        "Alarm_Clock_18",
+        "Alarm_Clock_2"
+      ],
+      "unsafe": []
+    },
+    "Dresser|2|1": {
+      "type": "Dresser",
+      "original": "Dresser_318_1",
+      "safe": [],
+      "unsafe": [
+        "Dresser_209_1",
+        "Dresser_210_1_1",
+        "Dresser_217_1",
+        "Dresser_218_1",
+        "Dresser_224_1",
+        "Dresser_229_1"
+      ]
+    },
+    "Book|surface|2|0": {
+      "type": "Book",
+      "original": "RoboTHOR_book_ai2_2_v",
+      "safe": [
+        "Book_1",
+        "Book_14",
+        "Book_15",
+        "Book_17",
+        "Book_18",
+        "Book_19"
+      ],
+      "unsafe": []
+    },
+    "Pen|surface|2|3": {
+      "type": "Pen",
+      "original": "Pen_3",
+      "safe": [
+        "Pen_1",
+        "Pen_2",
+        "Pen_4",
+        "RoboTHOR_pen_signo_v"
+      ],
+      "unsafe": []
+    },
+    "Bowl|surface|2|5": {
+      "type": "Bowl",
+      "original": "Bowl_8",
+      "safe": [
+        "Bowl_10",
+        "Bowl_11",
+        "Bowl_14",
+        "Bowl_15",
+        "Bowl_18",
+        "Bowl_19"
+      ],
+      "unsafe": []
+    },
+    "HousePlant|surface|2|6": {
+      "type": "HousePlant",
+      "original": "Houseplant_15",
+      "safe": [
+        "Houseplant_10",
+        "Houseplant_11",
+        "Houseplant_14",
+        "Houseplant_18",
+        "Houseplant_19",
+        "Houseplant_2"
+      ],
+      "unsafe": []
+    },
+    "Laptop|surface|2|10": {
+      "type": "Laptop",
+      "original": "Laptop_22",
+      "safe": [
+        "Laptop_10",
+        "Laptop_11",
+        "Laptop_14",
+        "Laptop_15",
+        "Laptop_18",
+        "Laptop_19"
+      ],
+      "unsafe": []
+    },
+    "KeyChain|surface|2|12": {
+      "type": "KeyChain",
+      "original": "Keychain_2",
+      "safe": [
+        "Keychain_1",
+        "Keychain_3"
+      ],
+      "unsafe": []
+    },
+    "DiningTable|2|2|0": {
+      "type": "DiningTable",
+      "original": "Dining_Table_27_1",
+      "safe": [],
+      "unsafe": [
+        "Dining_Table_16_2",
+        "Dining_Table_201_1",
+        "Dining_Table_205_1",
+        "Dining_Table_208_1",
+        "Dining_Table_218_1",
+        "Dining_Table_21_1"
+      ]
+    },
+    "CellPhone|surface|2|1": {
+      "type": "CellPhone",
+      "original": "Cellphone_8",
+      "safe": [
+        "Cellphone_3",
+        "Cellphone_4",
+        "Cellphone_5",
+        "Cellphone_7",
+        "RoboTHOR_cellphone_blackberry_v"
+      ],
+      "unsafe": []
+    },
+    "CellPhone|surface|2|2": {
+      "type": "CellPhone",
+      "original": "Cellphone_5",
+      "safe": [
+        "Cellphone_3",
+        "Cellphone_4",
+        "Cellphone_7",
+        "Cellphone_8",
+        "RoboTHOR_cellphone_blackberry_v"
+      ],
+      "unsafe": []
+    },
+    "DeskLamp|surface|2|4": {
+      "type": "DeskLamp",
+      "original": "Desk_Lamp_6",
+      "safe": [
+        "Desk_Lamp_11",
+        "Desk_Lamp_12",
+        "Desk_Lamp_2",
+        "Desk_Lamp_3",
+        "Desk_Lamp_4",
+        "Desk_Lamp_5"
+      ],
+      "unsafe": []
+    },
+    "Pencil|surface|2|7": {
+      "type": "Pencil",
+      "original": "Pencil_5",
+      "safe": [
+        "Pencil_3",
+        "Pencil_4",
+        "Pencil_7",
+        "RoboTHOR_pencil_amazon_basics_v"
+      ],
+      "unsafe": []
+    },
+    "Pencil|surface|2|8": {
+      "type": "Pencil",
+      "original": "Pencil_3",
+      "safe": [
+        "Pencil_4",
+        "Pencil_5",
+        "Pencil_7",
+        "RoboTHOR_pencil_amazon_basics_v"
+      ],
+      "unsafe": []
+    },
+    "CreditCard|surface|2|9": {
+      "type": "CreditCard",
+      "original": "CreditCard_4",
+      "safe": [
+        "CreditCard_1",
+        "CreditCard_2",
+        "CreditCard_3"
+      ],
+      "unsafe": []
+    },
+    "Book|surface|2|11": {
+      "type": "Book",
+      "original": "Book_15",
+      "safe": [
+        "Book_1",
+        "Book_14",
+        "Book_17",
+        "Book_18",
+        "Book_19",
+        "Book_2"
+      ],
+      "unsafe": []
+    },
+    "Chair|2|2|1": {
+      "type": "Chair",
+      "original": "RoboTHOR_chair_antnas",
+      "safe": [
+        "Chair_002_1",
+        "Chair_007_1",
+        "Chair_007_2",
+        "Chair_203_1",
+        "Chair_203_2",
+        "Chair_203_3"
+      ],
+      "unsafe": []
+    },
+    "Toilet|3|0": {
+      "type": "Toilet",
+      "original": "Toilet_1",
+      "safe": [],
+      "unsafe": [
+        "Toilet_2"
+      ]
+    },
+    "ToiletPaper|surface|3|14": {
+      "type": "ToiletPaper",
+      "original": "Toilet_Paper",
+      "safe": [
+        "Toilet_Paper_Used_Up"
+      ],
+      "unsafe": []
+    },
+    "Sink|3|1|0": {
+      "type": "Sink",
+      "original": "Sink_19",
+      "safe": [
+        "Sink_15"
+      ],
+      "unsafe": [
+        "Sink_20",
+        "Sink_26"
+      ]
+    },
+    "Faucet|3|1|1": {
+      "type": "Faucet",
+      "original": "Bathroom_Faucet_15",
+      "safe": [
+        "Bathroom_Faucet_1",
+        "Bathroom_Faucet_14",
+        "Bathroom_Faucet_19",
+        "Bathroom_Faucet_2",
+        "Bathroom_Faucet_20",
+        "Bathroom_Faucet_21"
+      ],
+      "unsafe": []
+    },
+    "GarbageCan|3|2": {
+      "type": "GarbageCan",
+      "original": "bin_13",
+      "safe": [
+        "bin_1",
+        "bin_10",
+        "bin_14",
+        "bin_17",
+        "bin_18",
+        "bin_19"
+      ],
+      "unsafe": []
+    },
+    "Plunger|3|3": {
+      "type": "Plunger",
+      "original": "Plunger_1",
+      "safe": [
+        "Plunger_2",
+        "Plunger_3"
+      ],
+      "unsafe": []
+    },
+    "SideTable|3|4": {
+      "type": "SideTable",
+      "original": "Side_Table_302_1_5",
+      "safe": [
+        "RoboTHOR_side_table_hol",
+        "RoboTHOR_side_table_tingby",
+        "Side_Table_201_1_1"
+      ],
+      "unsafe": [
+        "RoboTHOR_side_table_fornbro",
+        "Side_Table_201_2_1",
+        "Side_Table_201_3_1"
+      ]
+    },
+    "HousePlant|surface|3|15": {
+      "type": "HousePlant",
+      "original": "Houseplant_4",
+      "safe": [
+        "Houseplant_10",
+        "Houseplant_11",
+        "Houseplant_14",
+        "Houseplant_15",
+        "Houseplant_18",
+        "Houseplant_19"
+      ],
+      "unsafe": []
+    },
+    "Painting|2|3": {
+      "type": "Painting",
+      "original": "Wall_Decor_Painting_10",
+      "safe": [
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7",
+        "Wall_Decor_Painting_8"
+      ],
+      "unsafe": []
+    },
+    "Painting|2|4": {
+      "type": "Painting",
+      "original": "Wall_Decor_Photo_3",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7"
+      ],
+      "unsafe": []
+    },
+    "Painting|3|5": {
+      "type": "Painting",
+      "original": "Wall_Decor_Painting_3",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7",
+        "Wall_Decor_Painting_8"
+      ],
+      "unsafe": []
+    },
+    "Painting|3|6": {
+      "type": "Painting",
+      "original": "Wall_Decor_Photo_1",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7"
+      ],
+      "unsafe": []
+    },
+    "Painting|3|7": {
+      "type": "Painting",
+      "original": "Wall_Decor_Photo_10",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7"
+      ],
+      "unsafe": []
+    }
+  }
+}

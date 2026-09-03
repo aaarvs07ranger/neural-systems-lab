@@ -82,12 +82,28 @@ PAIR0 = dict(
 # ---------------------------------------------------------------------------
 # Ingestion
 # ---------------------------------------------------------------------------
-def read_metrics(summary_csv: Path) -> Dict[str, float]:
-    """Pull A/B metrics from a <prefix>_transfer_summary.csv (never hand-typed)."""
+def read_metrics(summary_csv: Path, level: str = "L1") -> Dict[str, float]:
+    """Pull A/B metrics from a <prefix>_transfer_summary.csv (never hand-typed).
+
+    Summaries written after the severity ladder landed carry one row per rung
+    plus a ``level`` column, so ``level`` picks which rung plays the role of B.
+    Older summaries have exactly two rows and no ``level`` column; they are read
+    the way they always were, so every committed result still ingests
+    identically.
+    """
     df = pd.read_csv(summary_csv)
-    by = {("A" if str(r["variant"]).startswith("A") else "B"): r
-          for _, r in df.iterrows()}
-    a, b = by["A"], by["B"]
+    if "level" in df.columns:
+        rows = {str(r["level"]): r for _, r in df.iterrows()}
+        if level not in rows:
+            raise KeyError(
+                f"{summary_csv} has no level '{level}' "
+                f"(present: {sorted(rows)})"
+            )
+        a, b = rows["A"], rows[level]
+    else:
+        by = {("A" if str(r["variant"]).startswith("A") else "B"): r
+              for _, r in df.iterrows()}
+        a, b = by["A"], by["B"]
     a_succ, b_succ = float(a["success_rate"]), float(b["success_rate"])
     a_spl, b_spl = float(a["spl"]), float(b["spl"])
     a_len, b_len = float(a["mean_episode_length"]), float(b["mean_episode_length"])

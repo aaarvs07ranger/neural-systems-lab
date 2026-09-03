@@ -48,6 +48,7 @@ if "--smoke" in sys.argv and "NSL_RESULTS_DIR" not in os.environ:
 from config import (  # noqa: E402
     HOUSE_A_PATH,
     HOUSE_B_PATH,
+    resolve_pair,
     LOGS_DIR,
     DreamerV3Config,
     PPOAugConfig,
@@ -89,22 +90,27 @@ def stage_generate(force: bool) -> None:
     generate()
 
 
-def stage_train(baseline: str, cfg) -> None:
+def stage_train(baseline: str, cfg, pair_id: str = None) -> None:
+    # The agent only ever trains in house A; the severity rung changes which
+    # house is EVALUATED, so one trained model serves the whole ladder.
+    pair = resolve_pair(pair_id)
     if baseline in ("ppo", "ppo_aug"):
         from scripts.train_ppo import train
 
-        train(cfg)
+        train(cfg, pair)
     elif baseline == "dreamerv3":
         from models.dreamer_v3.adapter import DreamerV3Adapter
 
         DreamerV3Adapter(cfg).train(
-            HOUSE_A_PATH, total_timesteps=cfg.total_timesteps, seed=cfg.seed
+            pair.house_a, total_timesteps=cfg.total_timesteps, seed=cfg.seed,
+            pair=pair,
         )
     elif baseline == "tdmpc2":
         from models.td_mpc2.adapter import TDMPC2Adapter
 
         TDMPC2Adapter(cfg).train(
-            HOUSE_A_PATH, total_timesteps=cfg.total_timesteps, seed=cfg.seed
+            pair.house_a, total_timesteps=cfg.total_timesteps, seed=cfg.seed,
+            pair=pair,
         )
     else:
         raise NotImplementedError(
@@ -113,15 +119,18 @@ def stage_train(baseline: str, cfg) -> None:
         )
 
 
-def stage_eval(baseline: str, cfg) -> None:
+def stage_eval(baseline: str, cfg, pair_id: str = None) -> None:
     if baseline in IMPLEMENTED_BASELINES:
         from scripts.evaluate_transfer import run_transfer_eval
 
-        result = run_transfer_eval(cfg, baseline=baseline)
-        logger.info(
-            "SUCCESS-RATE DROP A->B: %.3f absolute — see results/tables + plots",
-            result["success_drop_abs"],
-        )
+        result = run_transfer_eval(cfg, baseline=baseline, pair_id=pair_id)
+        for level, r in result["levels"].items():
+            if level == "A":
+                continue
+            logger.info(
+                "SUCCESS-RATE DROP A->%s: %.3f absolute — see results/tables + plots",
+                level, r["success_drop_abs"],
+            )
     else:
         raise NotImplementedError(f"baseline '{baseline}' not implemented yet")
 
@@ -143,6 +152,9 @@ def main() -> None:
     parser.add_argument("--train-ratio", type=int, default=None,
                         help="override DreamerV3 train_ratio (e.g. 512 on "
                              "cluster GPUs; ignored by baselines without it)")
+    parser.add_argument("--pair", default=None,
+                        help="house pair id (e.g. pair0); default = $NSL_PAIR, "
+                             "else the legacy flat data/house_*.json layout")
     parser.add_argument("--smoke", action="store_true",
                         help="tiny end-to-end run to verify pipeline mechanics")
     parser.add_argument("--force-generate", action="store_true",
@@ -180,9 +192,9 @@ def main() -> None:
     if args.stage in ("all", "generate"):
         stage_generate(force=args.force_generate)
     if args.stage in ("all", "train"):
-        stage_train(args.baseline, cfg)
+        stage_train(args.baseline, cfg, args.pair)
     if args.stage in ("all", "eval"):
-        stage_eval(args.baseline, cfg)
+        stage_eval(args.baseline, cfg, args.pair)
     logger.info("pipeline done in %.1f min", (time.time() - start) / 60.0)
 
 
