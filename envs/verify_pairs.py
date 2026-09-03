@@ -85,6 +85,7 @@ def probe_house(
 
 def verify_pair(
     pair_id: str, levels: List[str], n_seeds: int = 25,
+    rewrite_oracle: bool = False,
 ) -> Dict[str, Any]:
     """Run C1-C3 for one pair across the requested levels."""
     cfg = PPOConfig()
@@ -116,12 +117,35 @@ def verify_pair(
                            "total": ref["starts"][s]["shortest_path_length"]}
                   for s in seeds},
     }
-    (pair_dir(pair_id) / "oracle_paths.json").write_text(json.dumps(oracle, indent=2))
-    logger.info("[%s] wrote oracle_paths.json (%d seeds, measured in house A)",
-                pair_id, n_seeds)
+    # The oracle table is the SPL denominator for every run of this pair, so a
+    # standalone verification -- which is a check, not a production step -- must
+    # not silently rewrite it. Only regeneration, which invalidates the old
+    # measurements by construction, passes rewrite_oracle.
+    oracle_path = pair_dir(pair_id) / "oracle_paths.json"
+    if rewrite_oracle or not oracle_path.exists():
+        oracle_path.write_text(json.dumps(oracle, indent=2))
+        logger.info("[%s] wrote oracle_paths.json (%d seeds, measured in house A)",
+                    pair_id, n_seeds)
+    else:
+        stored = json.loads(oracle_path.read_text()).get("seeds", {})
+        drift = [s for s in seeds
+                 if abs(float(stored.get(str(s), {}).get("total", float("nan")))
+                        - ref["starts"][s]["shortest_path_length"]) > PATH_TOLERANCE]
+        if drift:
+            logger.error("[%s] the existing oracle table disagrees with house A "
+                         "on %d/%d seeds -- it was measured against different "
+                         "houses or a different pose split. Re-run with "
+                         "--rewrite-oracle after regenerating.",
+                         pair_id, len(drift), len(seeds))
+            result_drift = len(drift)
+        else:
+            logger.info("[%s] existing oracle_paths.json matches house A "
+                        "(%d seeds) -- left untouched", pair_id, n_seeds)
+            result_drift = 0
 
     result: Dict[str, Any] = {
         "pair_id": pair_id,
+        "oracle_seeds_disagreeing_with_house_a": locals().get("result_drift", 0),
         "target_object_type": env_cfg.target_object_type,
         "n_eval_seeds": n_seeds,
         "reference": {"n_reachable": ref["n_reachable"],
@@ -192,6 +216,10 @@ def main() -> None:
                         help="verify a single pair (default: every pair on disk)")
     parser.add_argument("--levels", type=str, default=None,
                         help="comma-separated levels (default: those in pairs_index)")
+    parser.add_argument("--rewrite-oracle", action="store_true",
+                        help="re-measure oracle_paths.json from house A. Only "
+                             "after regenerating the houses -- a plain check "
+                             "must never rewrite the SPL denominator.")
     parser.add_argument("--episodes", type=int, default=25,
                         help="how many eval start poses to check for C2")
     args = parser.parse_args()
@@ -214,7 +242,8 @@ def main() -> None:
 
     all_passed = True
     for pair_id in pair_ids:
-        result = verify_pair(pair_id, levels, n_seeds=args.episodes)
+        result = verify_pair(pair_id, levels, n_seeds=args.episodes,
+                             rewrite_oracle=args.rewrite_oracle)
         out = pair_dir(pair_id) / "verification.json"
         out.write_text(json.dumps(result, indent=2))
         logger.info("[%s] wrote %s -> %s", pair_id, out,

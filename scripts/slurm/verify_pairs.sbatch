@@ -31,6 +31,9 @@ conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
 
 export PYTHONUNBUFFERED=1
 export NSL_THOR_PLATFORM=cloudrendering
+# Same protocol the grid runs, so the start poses checked here are the ones
+# the experiment actually uses.
+export NSL_POSE_HOLDOUT=1
 cd "${SLURM_SUBMIT_DIR}"
 
 ARGS=()
