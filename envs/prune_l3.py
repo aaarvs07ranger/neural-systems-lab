@@ -50,6 +50,17 @@ from envs.scan_safe_assets import _make_controller, _reachable  # noqa: E402
 
 logger = logging.getLogger("prune_l3")
 
+# How many times a configuration must come back clean before it is accepted.
+#
+# Unity's physics settle is not bit-deterministic, so an object balanced near an
+# edge stays put on some loads and falls on others. A single clean reading is
+# therefore not evidence that a house IS clean -- only that it was clean once.
+# Observed 2026-09-03: prune certified pair1 L3 with all 4 distractors kept, and
+# the verification gate immediately after found a blocked floor cell in the same
+# file. Certification reloads the scene this many times and takes the UNION of
+# defects, so a flaky object is treated as a defect rather than a coin flip.
+STABILITY_TRIALS = 3
+
 House = Dict[str, Any]
 
 
@@ -140,15 +151,34 @@ def prune_pair(
     dropped: List[Dict[str, Any]] = []
     keep = set(candidates)
 
-    def defects(drop: Set[str]) -> Tuple[Set, Set, List[str]]:
-        """Floor cells lost, floor cells gained, and pinned poses blocked."""
-        current = _reachable(controller, _without(house_l3, drop))
-        return (reference - current, current - reference,
-                _blocked_poses(controller, poses))
+    def defects(drop: Set[str], trials: int = 1) -> Tuple[Set, Set, List[str]]:
+        """Floor cells lost, floor cells gained, and pinned poses blocked.
+
+        With ``trials > 1`` the scene is reloaded repeatedly and the UNION of
+        every reading is returned: a defect that appears in any load is a defect,
+        because the grid will load these houses hundreds of times.
+        """
+        missing: Set = set()
+        extra: Set = set()
+        blocked: List[str] = []
+        for _ in range(max(1, trials)):
+            current = _reachable(controller, _without(house_l3, drop))
+            missing |= reference - current
+            extra |= current - reference
+            for seed in _blocked_poses(controller, poses):
+                if seed not in blocked:
+                    blocked.append(seed)
+        return missing, extra, blocked
 
     for _ in range(len(candidates) + 1):
-        missing, extra, blocked = defects(set(candidates) - keep)
+        # Certification is the expensive, repeated reading. Ranking candidates
+        # below uses a single reading -- it only has to order them, and a wrong
+        # order costs one extra iteration, not a bad house.
+        missing, extra, blocked = defects(set(candidates) - keep,
+                                          trials=STABILITY_TRIALS)
         if not missing and not extra and not blocked:
+            logger.info("[%s] clean on %d consecutive loads with %d distractors",
+                        pair_id, STABILITY_TRIALS, len(keep))
             break
         if not keep:
             # Nothing left to remove and it still differs: the fault is not the
@@ -200,6 +230,7 @@ def prune_pair(
         "dropped": dropped,
         "n_reachable_reference": len(reference),
         "n_pinned_poses_checked": len(poses),
+        "stability_trials": STABILITY_TRIALS,
     }
     (pair_dir(pair_id) / "l3_prune.json").write_text(json.dumps(report, indent=2))
     logger.info("[%s] L3 distractors: %d placed -> %d kept", pair_id,
