@@ -53,11 +53,9 @@
 
 ## L3 -- distractor objects
 
-4 distractor(s) added, 4 of a type absent from A. All placed on receptacle surfaces; none of the target type.
+2 distractor(s) added, 2 of a type absent from A. All placed on receptacle surfaces; none of the target type.
 
 - `DeskLamp|distractor|0` (DeskLamp, `Desk_Lamp_2`) on `Dresser|2|1`
 - `Pan|distractor|1` (Pan, `Pan_14`) on `Dresser|2|1`
-- `CD|distractor|2` (CD, `CD_1`) on `Dresser|2|1`
-- `Apple|distractor|3` (Apple, `Apple_27`) on `Dresser|2|1`
 
 _Note: scaled 8 -> 4: only 1 non-target surface(s) available_

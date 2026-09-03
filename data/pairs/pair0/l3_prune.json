@@ -8,18 +8,20 @@
   ],
   "dropped": [
     {
-      "id": "BaseballBat|distractor|1",
+      "id": "Candle|distractor|2",
       "defects_freed": 3,
       "defects_before": 7,
       "reason": "blocked floor or a pinned eval start pose"
     },
     {
-      "id": "Candle|distractor|2",
+      "id": "BaseballBat|distractor|1",
       "defects_freed": 4,
       "defects_before": 4,
       "reason": "blocked floor or a pinned eval start pose"
     }
   ],
+  "n_unstable_dropped": 0,
+  "settle_tolerance_m": 0.02,
   "n_reachable_reference": 380,
   "n_pinned_poses_checked": 25,
   "stability_trials": 3

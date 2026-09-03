@@ -1,18 +1,17 @@
 {
   "pair": "pair2",
-  "n_placed": 8,
-  "n_kept": 8,
+  "n_placed": 5,
+  "n_kept": 5,
   "kept": [
-    "Apple|distractor|5",
     "CellPhone|distractor|1",
     "Ladle|distractor|0",
     "Newspaper|distractor|3",
-    "Spatula|distractor|6",
     "SprayBottle|distractor|2",
-    "ToiletPaper|distractor|7",
-    "WineBottle|distractor|4"
+    "ToiletPaper|distractor|7"
   ],
   "dropped": [],
+  "n_unstable_dropped": 0,
+  "settle_tolerance_m": 0.02,
   "n_reachable_reference": 128,
   "n_pinned_poses_checked": 25,
   "stability_trials": 3

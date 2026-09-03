@@ -88,6 +88,6 @@
 - `Bottle|distractor|2` (Bottle, `Bottle_1`) on `CounterTop|2|0`
 - `Plate|distractor|3` (Plate, `Plate_27`) on `DiningTable|3|1`
 - `TeddyBear|distractor|4` (TeddyBear, `Teddy_Bear_2`) on `DiningTable|3|1`
-- `Newspaper|distractor|5` (Newspaper, `Newspaper_3`) on `Fridge|2|1`
-- `TennisRacket|distractor|6` (TennisRacket, `Tennis_Racquet_2`) on `Sofa|3|0|1`
+- `Newspaper|distractor|5` (Newspaper, `Newspaper_2`) on `TVStand|3|0|0`
+- `TennisRacket|distractor|6` (TennisRacket, `Tennis_Racquet_1`) on `CounterTop|2|0`
 - `ButterKnife|distractor|7` (ButterKnife, `ButterKnife_1`) on `CounterTop|2|0`

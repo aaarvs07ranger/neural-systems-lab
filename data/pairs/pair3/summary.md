@@ -85,6 +85,6 @@
 - `Bread|distractor|2` (Bread, `Bread_29`) on `SideTable|3|4`
 - `CD|distractor|3` (CD, `CD_1`) on `Dresser|2|1`
 - `Potato|distractor|4` (Potato, `Potato_10`) on `Dresser|2|1`
-- `Spoon|distractor|5` (Spoon, `Spoon_1`) on `Toilet|3|0`
-- `Bottle|distractor|6` (Bottle, `Bottle_1`) on `Sink|3|1|0`
-- `Statue|distractor|7` (Statue, `Dog_Statue_2`) on `Sink|3|1|0`
+- `Spoon|distractor|5` (Spoon, `Spoon_1`) on `Sink|3|1|0`
+- `Bottle|distractor|6` (Bottle, `Bottle_1`) on `DiningTable|2|2|0`
+- `Statue|distractor|7` (Statue, `Fertility_Statue_1`) on `Sink|3|1|0`

@@ -14,11 +14,12 @@
   "dropped": [
     {
       "id": "Bread|distractor|2",
-      "defects_freed": 4,
-      "defects_before": 4,
-      "reason": "blocked floor or a pinned eval start pose"
+      "max_drift_m": 0.033,
+      "reason": "does not settle in the same place on every load"
     }
   ],
+  "n_unstable_dropped": 1,
+  "settle_tolerance_m": 0.02,
   "n_reachable_reference": 460,
   "n_pinned_poses_checked": 25,
   "stability_trials": 3

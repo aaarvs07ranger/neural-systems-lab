@@ -1,20 +1,14 @@
 {
   "pair": "pair1",
-  "n_placed": 4,
-  "n_kept": 3,
+  "n_placed": 2,
+  "n_kept": 2,
   "kept": [
-    "CD|distractor|2",
     "DeskLamp|distractor|0",
     "Pan|distractor|1"
   ],
-  "dropped": [
-    {
-      "id": "Apple|distractor|3",
-      "defects_freed": 2,
-      "defects_before": 2,
-      "reason": "blocked floor or a pinned eval start pose"
-    }
-  ],
+  "dropped": [],
+  "n_unstable_dropped": 0,
+  "settle_tolerance_m": 0.02,
   "n_reachable_reference": 162,
   "n_pinned_poses_checked": 25,
   "stability_trials": 3

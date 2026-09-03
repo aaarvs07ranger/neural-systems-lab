@@ -74,6 +74,6 @@
 - `DeskLamp|distractor|0` (DeskLamp, `RoboTHOR_desk_lamp_arstid_v`) on `CounterTop|2|0`
 - `BaseballBat|distractor|1` (BaseballBat, `BaseballBat_1`) on `CounterTop|2|0`
 - `Candle|distractor|2` (Candle, `RoboTHOR_candle_glittrig_3_v`) on `CounterTop|2|0`
-- `Mug|distractor|3` (Mug, `RoboTHOR_mug_ai2_2_v`) on `CounterTop|2|0`
+- `Mug|distractor|3` (Mug, `Mug_3`) on `CounterTop|2|0`
 
 _Note: scaled 8 -> 4: only 1 non-target surface(s) available_

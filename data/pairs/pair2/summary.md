@@ -59,13 +59,10 @@
 
 ## L3 -- distractor objects
 
-8 distractor(s) added, 8 of a type absent from A. All placed on receptacle surfaces; none of the target type.
+5 distractor(s) added, 5 of a type absent from A. All placed on receptacle surfaces; none of the target type.
 
 - `Ladle|distractor|0` (Ladle, `Ladle_3`) on `Dresser|2|1`
-- `CellPhone|distractor|1` (CellPhone, `Cellphone_3`) on `Dresser|2|1`
-- `SprayBottle|distractor|2` (SprayBottle, `Spray_Bottle_6`) on `Dresser|2|1`
-- `Newspaper|distractor|3` (Newspaper, `Newspaper_3`) on `Dresser|2|1`
-- `WineBottle|distractor|4` (WineBottle, `Wine_Bottle_1`) on `Dresser|2|1`
-- `Apple|distractor|5` (Apple, `Apple_15`) on `Dresser|2|1`
-- `Spatula|distractor|6` (Spatula, `Spatula_1`) on `Dresser|2|1`
-- `ToiletPaper|distractor|7` (ToiletPaper, `Toilet_Paper`) on `Dresser|2|1`
+- `CellPhone|distractor|1` (CellPhone, `Cellphone_7`) on `Desk|2|3`
+- `SprayBottle|distractor|2` (SprayBottle, `Spray_Bottle_3`) on `Desk|2|3`
+- `Newspaper|distractor|3` (Newspaper, `Newspaper_2`) on `Dresser|2|1`
+- `ToiletPaper|distractor|7` (ToiletPaper, `Toilet_Paper_Used_Up`) on `Dresser|2|1`
