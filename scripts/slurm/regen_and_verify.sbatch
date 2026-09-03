@@ -34,7 +34,12 @@ cd "${SLURM_SUBMIT_DIR}"
 
 echo "[slurm] regenerating pairs using the footprint-safe whitelist"
 python envs/generate_variants.py --pairs 5
-echo "[slurm] pruning L3 distractors that block floor"
+# The pose/distance table is produced first, from house A alone, because the
+# prune step needs the pinned start poses to test against: a distractor can
+# leave the navmesh untouched and still block a cell the agent teleports into.
+echo "[slurm] measuring oracle poses + distances in house A"
+python envs/verify_pairs.py --oracle-only
+echo "[slurm] pruning L3 distractors that block floor or a pinned start pose"
 python envs/prune_l3.py
 echo "[slurm] running the C1-C3 verification gate"
-python envs/verify_pairs.py --rewrite-oracle
+python envs/verify_pairs.py

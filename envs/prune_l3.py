@@ -53,6 +53,43 @@ logger = logging.getLogger("prune_l3")
 House = Dict[str, Any]
 
 
+def _pinned_poses(pair_id: str) -> List[Dict[str, Any]]:
+    """The eval start poses recorded in house A, if the table exists yet."""
+    path = pair_dir(pair_id) / "oracle_paths.json"
+    if not path.exists():
+        logger.warning("[%s] no oracle_paths.json -- pruning on the floor check "
+                       "alone. Run `verify_pairs.py --oracle-only` first to also "
+                       "check that every eval start pose stays reachable.",
+                       pair_id)
+        return []
+    table = json.loads(path.read_text()).get("seeds", {})
+    return [{"seed": s, "position": e["start_position"],
+             "rotation": e.get("start_rotation", 0.0)}
+            for s, e in sorted(table.items())
+            if "start_position" in e]
+
+
+def _blocked_poses(controller, poses: List[Dict[str, Any]]) -> List[str]:
+    """Which pinned start poses cannot be teleported into in the loaded house.
+
+    A cell can appear in GetReachablePositions and still refuse a Teleport: the
+    navmesh query and the agent's collision capsule do not agree once an object
+    has settled on the floor. That gap is what broke pair1 L3 on 2026-09-03 --
+    C1 passed, the teleport failed, the retry drew a different pose, and the two
+    variants silently stopped being paired.
+    """
+    blocked = []
+    for pose in poses:
+        event = controller.step(
+            action="Teleport", position=pose["position"],
+            rotation={"x": 0.0, "y": pose["rotation"], "z": 0.0},
+            horizon=0.0, standing=True,
+        )
+        if not event.metadata["lastActionSuccess"]:
+            blocked.append(pose["seed"])
+    return blocked
+
+
 def _distractor_ids(house: House) -> List[str]:
     """Every id L3 added, at any nesting depth, in document order."""
     found: List[str] = []
@@ -98,48 +135,58 @@ def prune_pair(
     controller = controller_holder["controller"]
 
     reference = _reachable(controller, house_a)
+    poses = _pinned_poses(pair_id)
     candidates = _distractor_ids(house_l3)
     dropped: List[Dict[str, Any]] = []
     keep = set(candidates)
 
+    def defects(drop: Set[str]) -> Tuple[Set, Set, List[str]]:
+        """Floor cells lost, floor cells gained, and pinned poses blocked."""
+        current = _reachable(controller, _without(house_l3, drop))
+        return (reference - current, current - reference,
+                _blocked_poses(controller, poses))
+
     for _ in range(len(candidates) + 1):
-        current = _reachable(controller, _without(house_l3, set(candidates) - keep))
-        missing = reference - current
-        extra = current - reference
-        if not missing and not extra:
+        missing, extra, blocked = defects(set(candidates) - keep)
+        if not missing and not extra and not blocked:
             break
         if not keep:
-            # Nothing left to remove and the floor still differs: the fault is
-            # not the clutter, so stop rather than silently shipping a bad house.
-            logger.error("[%s] floor still differs with zero distractors "
-                         "(%d missing, %d extra) -- L2 or the house itself is "
-                         "at fault, not L3", pair_id, len(missing), len(extra))
+            # Nothing left to remove and it still differs: the fault is not the
+            # clutter, so stop rather than silently shipping a bad house.
+            logger.error("[%s] still defective with zero distractors "
+                         "(%d cells missing, %d extra, %d start poses blocked) "
+                         "-- L2 or the house itself is at fault, not L3",
+                         pair_id, len(missing), len(extra), len(blocked))
             break
         # Remove whichever single distractor frees the most blocked cells.
-        best_id, best_freed, best_missing = None, -1, None
+        before = len(missing) + len(blocked)
+        best_id, best_freed, best_before = None, -1, before
         for obj_id in sorted(keep):
-            trial = _reachable(
-                controller, _without(house_l3, (set(candidates) - keep) | {obj_id})
+            t_missing, _, t_blocked = defects(
+                (set(candidates) - keep) | {obj_id}
             )
-            freed = len(missing - (reference - trial))
+            # Count blocked poses alongside blocked cells: a distractor that
+            # frees no floor but unblocks a start pose is exactly the one to go.
+            freed = before - (len(t_missing) + len(t_blocked))
             if freed > best_freed:
-                best_id, best_freed, best_missing = obj_id, freed, len(missing)
+                best_id, best_freed = obj_id, freed
         if best_freed <= 0:
             # No single removal helps: the blockage is joint, so drop them all.
-            logger.warning("[%s] no single distractor explains the %d blocked "
-                           "cells -- dropping all %d remaining",
-                           pair_id, len(missing), len(keep))
+            logger.warning("[%s] no single distractor explains the %d defects "
+                           "-- dropping all %d remaining",
+                           pair_id, before, len(keep))
             for obj_id in sorted(keep):
                 dropped.append({"id": obj_id, "cells_freed": 0,
                                 "reason": "joint blockage"})
             keep = set()
             continue
-        dropped.append({"id": best_id, "cells_freed": best_freed,
-                        "cells_blocked_before": best_missing,
-                        "reason": "blocked floor the agent can stand on"})
+        dropped.append({"id": best_id, "defects_freed": best_freed,
+                        "defects_before": best_before,
+                        "reason": "blocked floor or a pinned eval start pose"})
         keep.discard(best_id)
-        logger.info("[%s] dropping %s (frees %d of %d blocked cells)",
-                    pair_id, best_id, best_freed, best_missing)
+        logger.info("[%s] dropping %s (fixes %d of %d defects: %d cells, "
+                    "%d start poses)", pair_id, best_id, best_freed, before,
+                    len(missing), len(blocked))
 
     pruned = _without(house_l3, set(candidates) - keep)
     # Houses are written compact, matching envs/generate_variants.py.
@@ -152,6 +199,7 @@ def prune_pair(
         "kept": sorted(keep),
         "dropped": dropped,
         "n_reachable_reference": len(reference),
+        "n_pinned_poses_checked": len(poses),
     }
     (pair_dir(pair_id) / "l3_prune.json").write_text(json.dumps(report, indent=2))
     logger.info("[%s] L3 distractors: %d placed -> %d kept", pair_id,

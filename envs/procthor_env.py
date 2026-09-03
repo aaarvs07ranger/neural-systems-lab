@@ -388,6 +388,26 @@ class ProcTHORObjectNavEnv(gym.Env):
                 self._oracle_table = {}
         return self._oracle_table
 
+    def _pinned_pose(self, seed: Optional[int]) -> Optional[Tuple[Vec3, float]]:
+        """The start pose recorded in house A for this eval seed, if any.
+
+        Returns None for training episodes (no explicit seed) and for any seed
+        the table does not cover, in which case the caller samples as before.
+        A table entry written before poses were pinned has no rotation; those
+        are treated as uncovered rather than guessed at, so an old table
+        degrades to the old behaviour instead of half-applying the new one.
+        """
+        if seed is None:
+            return None
+        entry = self._load_oracle_table().get(str(seed))
+        if not entry:
+            return None
+        position = entry.get("start_position")
+        rotation = entry.get("start_rotation")
+        if not position or rotation is None:
+            return None
+        return dict(position), float(rotation)
+
     def _oracle_for_seed(self, seed: Optional[int], start: Vec3) -> Optional[List[float]]:
         """A's distances for this episode, if available and the start matches."""
         if seed is None:
@@ -429,26 +449,61 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._ensure_controller()
         assert self._controller is not None and self._pose_pool is not None
 
-        # Sample a start pose from the (deterministically ordered) reachable
-        # set. With an explicit seed this is fully reproducible AND paired
-        # across visual variants (identical geometry => identical set).
+        # A pinned pose, if this seed is in the oracle table, otherwise a
+        # sampled one.
+        #
+        # Sampling used to be the only path, and it made A and B agree by luck
+        # rather than by construction. The retry loop below exists because a
+        # cell the navmesh reports as walkable can still be physically occupied
+        # -- a settled distractor, say -- and teleporting into it fails. When
+        # that happened in B but not in A, B drew a SECOND index: a different
+        # start pose, and an RNG now offset so every later draw diverged too.
+        # C1 passed (the navmesh matched), C2 failed, and the failure moved
+        # between runs because Unity's physics settle is not bit-deterministic.
+        # Observed 2026-09-03 on pair1 L3, on a file that had verified clean an
+        # hour earlier.
+        #
+        # Pinning removes the whole class: evaluation teleports to a pose
+        # recorded from house A, so A and B start identically by definition and
+        # no draw can diverge. Training keeps sampling -- it uses no eval seeds,
+        # so nothing is pinned and nothing can drift.
+        pinned = self._pinned_pose(seed)
         n_rot = max(1, int(round(360.0 / self._cfg.rotate_step_degrees)))
         event = None
-        for _ in range(10):  # rare: a sampled cell can be transiently blocked
-            idx = int(self.np_random.integers(len(self._pose_pool)))
-            yaw = float(self.np_random.integers(n_rot)) * self._cfg.rotate_step_degrees
+        if pinned is not None:
+            position, yaw = pinned
             event = self._controller.step(
-                action="Teleport",
-                position=self._pose_pool[idx],
+                action="Teleport", position=position,
                 rotation={"x": 0.0, "y": yaw, "z": 0.0},
-                horizon=0.0,
-                standing=True,
+                horizon=0.0, standing=True,
             )
-            if event.metadata["lastActionSuccess"]:
-                break
-        assert event is not None
-        if not event.metadata["lastActionSuccess"]:
-            raise RuntimeError(f"[{self.name}] could not teleport to any start pose.")
+            if not event.metadata["lastActionSuccess"]:
+                # Never silently fall back to sampling: that is precisely the
+                # divergence pinning exists to prevent. A blocked pinned pose
+                # means this house is not paired with A any more, and a loud
+                # crash is worth far more than a plausible-looking number.
+                raise RuntimeError(
+                    f"[{self.name}] eval seed {seed}: cannot teleport to the "
+                    f"pinned start pose {position} (yaw {yaw}). Something in "
+                    "this variant physically occupies a cell that is free in "
+                    "house A -- re-run envs/prune_l3.py and the C1-C3 gate."
+                )
+        else:
+            for _ in range(10):  # rare: a sampled cell can be transiently blocked
+                idx = int(self.np_random.integers(len(self._pose_pool)))
+                yaw = float(self.np_random.integers(n_rot)) * self._cfg.rotate_step_degrees
+                event = self._controller.step(
+                    action="Teleport",
+                    position=self._pose_pool[idx],
+                    rotation={"x": 0.0, "y": yaw, "z": 0.0},
+                    horizon=0.0,
+                    standing=True,
+                )
+                if event.metadata["lastActionSuccess"]:
+                    break
+            assert event is not None
+            if not event.metadata["lastActionSuccess"]:
+                raise RuntimeError(f"[{self.name}] could not teleport to any start pose.")
 
         metadata = event.metadata
         start_pos: Vec3 = metadata["agent"]["position"]
@@ -469,6 +524,7 @@ class ProcTHORObjectNavEnv(gym.Env):
 
         info: Dict[str, Any] = {
             "start_position": start_pos,
+            "start_rotation": float(metadata["agent"]["rotation"]["y"]),
             "shortest_path_length": self._shortest_path,
             "distance_to_target": self._prev_dist,
             "n_legs": len(self._sequence),

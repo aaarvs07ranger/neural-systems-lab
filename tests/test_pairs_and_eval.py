@@ -198,6 +198,59 @@ def test_tiny_house_refuses_to_leave_training_with_nothing() -> None:
         raise AssertionError("a fraction that empties training must raise")
 
 
+# ---------------------------------------------------------------------------
+# Pinned evaluation start poses
+# ---------------------------------------------------------------------------
+def _env_with_table(table: dict):
+    import json as _json
+    import tempfile
+    from envs.procthor_env import ObjectNavConfig, ProcTHORObjectNavEnv
+
+    fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+    _json.dump(table, fh)
+    fh.close()
+    return ProcTHORObjectNavEnv(
+        {"objects": []},
+        ObjectNavConfig(oracle_path_table=fh.name), name="test",
+    )
+
+
+_TABLE = {"seeds": {
+    "10000": {"start_position": {"x": 1.0, "y": 0.9, "z": 2.0},
+              "start_rotation": 90.0, "legs": [1.5], "total": 1.5},
+    # written before poses were pinned: position but no rotation
+    "10001": {"start_position": {"x": 2.0, "y": 0.9, "z": 3.0},
+              "legs": [2.0], "total": 2.0},
+}}
+
+
+def test_covered_eval_seed_is_pinned() -> None:
+    pos, yaw = _env_with_table(_TABLE)._pinned_pose(10000)
+    assert pos == {"x": 1.0, "y": 0.9, "z": 2.0}
+    assert yaw == 90.0
+
+
+def test_training_episodes_are_never_pinned() -> None:
+    """Training passes no explicit seed, so it must keep sampling freely.
+
+    Pinning training would collapse it onto 25 start poses and destroy the run.
+    """
+    assert _env_with_table(_TABLE)._pinned_pose(None) is None
+
+
+def test_uncovered_seed_falls_back_to_sampling() -> None:
+    assert _env_with_table(_TABLE)._pinned_pose(99999) is None
+
+
+def test_table_without_rotation_is_treated_as_uncovered() -> None:
+    """A pre-pinning table must degrade to the old behaviour, not half-apply.
+
+    Teleporting to the right cell facing an arbitrary way would diverge from
+    house A on step one, which is worse than not pinning at all.
+    """
+    assert _env_with_table(_TABLE)._pinned_pose(10001) is None
+
+
 def main() -> None:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

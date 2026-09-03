@@ -73,6 +73,7 @@ def probe_house(
             starts[seed] = {
                 "position": {k: round(v, POSITION_DECIMALS)
                              for k, v in info["start_position"].items()},
+                "rotation": round(float(info["start_rotation"]), 3),
                 "shortest_path_length": float(info["shortest_path_length"]),
             }
         return {"n_reachable": len(reachable),
@@ -85,7 +86,7 @@ def probe_house(
 
 def verify_pair(
     pair_id: str, levels: List[str], n_seeds: int = 25,
-    rewrite_oracle: bool = False,
+    rewrite_oracle: bool = False, oracle_only: bool = False,
 ) -> Dict[str, Any]:
     """Run C1-C3 for one pair across the requested levels."""
     cfg = PPOConfig()
@@ -112,7 +113,11 @@ def verify_pair(
         "target_object_type": env_cfg.target_object_type,
         "source": "house A",
         "n_eval_seeds": n_seeds,
+        # start_rotation pins the pose, not just the distance. Without it a
+        # variant could teleport to the right cell facing a different way, and
+        # the episode would diverge from A on step one.
         "seeds": {str(s): {"start_position": ref["starts"][s]["position"],
+                           "start_rotation": ref["starts"][s]["rotation"],
                            "legs": [ref["starts"][s]["shortest_path_length"]],
                            "total": ref["starts"][s]["shortest_path_length"]}
                   for s in seeds},
@@ -143,6 +148,13 @@ def verify_pair(
                         "(%d seeds) -- left untouched", pair_id, n_seeds)
             result_drift = 0
 
+    if oracle_only:
+        # Producing the pose/distance table is a separate step from checking the
+        # variants, because envs/prune_l3.py needs the pinned poses to test
+        # against and runs between the two.
+        return {"pair_id": pair_id, "levels": {}, "passed": True,
+                "oracle_only": True}
+
     result: Dict[str, Any] = {
         "pair_id": pair_id,
         "oracle_seeds_disagreeing_with_house_a": locals().get("result_drift", 0),
@@ -172,7 +184,8 @@ def verify_pair(
                    - got["starts"][s]["shortest_path_length"]) > PATH_TOLERANCE
         ]
         bad_starts = [s for s in seeds
-                      if ref["starts"][s]["position"] != got["starts"][s]["position"]]
+                      if ref["starts"][s]["position"] != got["starts"][s]["position"]
+                      or ref["starts"][s]["rotation"] != got["starts"][s]["rotation"]]
         # Option A (decided 2026-09-03): the oracle distance is measured ONCE in
         # house A and reused for every variant, because a swapped target has a
         # different surface and would otherwise be measured with a different
@@ -216,6 +229,10 @@ def main() -> None:
                         help="verify a single pair (default: every pair on disk)")
     parser.add_argument("--levels", type=str, default=None,
                         help="comma-separated levels (default: those in pairs_index)")
+    parser.add_argument("--oracle-only", action="store_true",
+                        help="probe house A, write oracle_paths.json, and stop. "
+                             "Run before envs/prune_l3.py, which needs the "
+                             "pinned start poses to test against.")
     parser.add_argument("--rewrite-oracle", action="store_true",
                         help="re-measure oracle_paths.json from house A. Only "
                              "after regenerating the houses -- a plain check "
@@ -243,13 +260,22 @@ def main() -> None:
     all_passed = True
     for pair_id in pair_ids:
         result = verify_pair(pair_id, levels, n_seeds=args.episodes,
-                             rewrite_oracle=args.rewrite_oracle)
+                             rewrite_oracle=args.rewrite_oracle or args.oracle_only,
+                             oracle_only=args.oracle_only)
+        if args.oracle_only:
+            # A trivially-passing stub must never replace a real gate record.
+            logger.info("[%s] oracle table written; verification.json untouched",
+                        pair_id)
+            continue
         out = pair_dir(pair_id) / "verification.json"
         out.write_text(json.dumps(result, indent=2))
         logger.info("[%s] wrote %s -> %s", pair_id, out,
                     "PASS" if result["passed"] else "FAIL")
         all_passed = all_passed and result["passed"]
 
+    if args.oracle_only:
+        print("\nORACLE TABLES WRITTEN (no variants checked)")
+        raise SystemExit(0)
     print("\n" + ("ALL PAIRS PASSED" if all_passed else "*** VERIFICATION FAILED ***"))
     raise SystemExit(0 if all_passed else 1)
 
