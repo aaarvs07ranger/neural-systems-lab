@@ -466,6 +466,7 @@ def _apply_l3(
     n_distractors: int,
     report: Dict[str, Any],
     surface_types: Optional[Set[str]] = None,
+    pickupable_types: Optional[Set[str]] = None,
 ) -> None:
     """Rung L3, in place: add distractor objects on top of existing receptacles.
 
@@ -485,6 +486,11 @@ def _apply_l3(
     # harvest_surface_types. Anything else falls to the floor and blocks
     # navigation.
     eligible = set(asset_pool) if surface_types is None else (set(asset_pool) & surface_types)
+    if pickupable_types is not None:
+        # Small enough to actually sit on a counter. Without this a Television
+        # and a Desktop qualified as "clutter", overhung the surface, fell to
+        # the floor and blocked navigation (failed C1 on 2 of 5 pairs).
+        eligible &= pickupable_types
     absent = sorted(t for t in eligible
                     if t not in present and t != target_object_type)
     fallback = sorted(t for t in (present & eligible) if t != target_object_type)
@@ -561,6 +567,7 @@ def build_variant(
     n_distractors: int = 8,
     safe_assets: Optional[Dict[str, List[str]]] = None,
     surface_types: Optional[Set[str]] = None,
+    pickupable_types: Optional[Set[str]] = None,
 ) -> Tuple[House, Dict[str, Any]]:
     """Deep-copy house A and apply every rung up to ``level``. Returns (B, report).
 
@@ -585,7 +592,7 @@ def build_variant(
     if level == "L3":
         _apply_l3(house_b, asset_pool or {}, rng,
                   str(target_object_type), n_distractors, report,
-                  surface_types=surface_types)
+                  surface_types=surface_types, pickupable_types=pickupable_types)
     return house_b, report
 
 
@@ -821,6 +828,14 @@ def generate(
     asset_pool = harvest_asset_pool(dataset, gen_cfg.scan_limit) if needs_objects else {}
     surface_types = (harvest_surface_types(dataset, gen_cfg.scan_limit)
                      if "L3" in requested else None)
+    pickupable_path = DATA_DIR / "pickupable_types.json"
+    pickupable_types = None
+    if "L3" in requested and pickupable_path.exists():
+        pickupable_types = set(json.loads(pickupable_path.read_text())["types"])
+        logger.info("L3 clutter restricted to %d pickupable types", len(pickupable_types))
+    elif "L3" in requested:
+        logger.warning("no pickupable_types.json -- L3 clutter may include oversized "
+                       "objects that fall to the floor (run envs/scan_safe_assets.py)")
 
     index: List[Dict[str, Any]] = []
     for pair_num, (house_index, house_a, target) in enumerate(houses):
@@ -848,6 +863,7 @@ def generate(
                 house_a, pools, pair_seed, level=level, asset_pool=asset_pool,
                 target_object_type=target, n_distractors=gen_cfg.n_distractors,
                 safe_assets=safe_assets, surface_types=surface_types,
+                pickupable_types=pickupable_types,
             )
             assert_structurally_identical(house_a, house_b, level=level,
                                           target_object_type=target)

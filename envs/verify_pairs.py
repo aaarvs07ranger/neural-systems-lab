@@ -96,6 +96,22 @@ def verify_pair(
                 env_cfg.target_object_type)
     ref = probe_house(pair_house_path(pair_id, "A"), env_cfg, seeds, f"{pair_id}_A")
 
+    # The single yardstick: house A's distances, keyed by eval seed. Every
+    # variant of this pair reads these instead of measuring its own.
+    oracle = {
+        "pair_id": pair_id,
+        "target_object_type": env_cfg.target_object_type,
+        "source": "house A",
+        "n_eval_seeds": n_seeds,
+        "seeds": {str(s): {"start_position": ref["starts"][s]["position"],
+                           "legs": [ref["starts"][s]["shortest_path_length"]],
+                           "total": ref["starts"][s]["shortest_path_length"]}
+                  for s in seeds},
+    }
+    (pair_dir(pair_id) / "oracle_paths.json").write_text(json.dumps(oracle, indent=2))
+    logger.info("[%s] wrote oracle_paths.json (%d seeds, measured in house A)",
+                pair_id, n_seeds)
+
     result: Dict[str, Any] = {
         "pair_id": pair_id,
         "target_object_type": env_cfg.target_object_type,
@@ -125,12 +141,18 @@ def verify_pair(
         ]
         bad_starts = [s for s in seeds
                       if ref["starts"][s]["position"] != got["starts"][s]["position"]]
-        c2 = not bad_paths and not bad_starts
+        # Option A (decided 2026-09-03): the oracle distance is measured ONCE in
+        # house A and reused for every variant, because a swapped target has a
+        # different surface and would otherwise be measured with a different
+        # yardstick. So C2 gates on START POSES only. The raw distance deltas
+        # are still recorded below -- they are the number to disclose in the
+        # appendix, not a reason to reject a house.
+        c2 = not bad_starts
         c3 = got["n_target_instances"] == ref["n_target_instances"]
 
         entry = {
             "C1_reachable_positions_identical": c1,
-            "C2_start_poses_and_paths_identical": c2,
+            "C2_start_poses_identical": c2,
             "C3_target_instance_count_identical": c3,
             "passed": bool(c1 and c2 and c3),
             "n_reachable": got["n_reachable"],
@@ -139,13 +161,19 @@ def verify_pair(
             "n_extra_positions": len(got["reachable"] - ref["reachable"]),
             "n_target_instances": got["n_target_instances"],
             "n_mismatched_start_poses": len(bad_starts),
+            # Diagnostics only (see the C2 note above): how far the measured
+            # distance moved because the target's mesh changed shape.
             "mismatched_shortest_paths": bad_paths[:5],
             "n_mismatched_shortest_paths": len(bad_paths),
+            "max_shortest_path_delta": round(max(
+                (abs(b["a"] - b["b"]) for b in bad_paths), default=0.0), 4),
         }
         result["levels"][level] = entry
         result["passed"] = result["passed"] and entry["passed"]
-        logger.info("[%s] %s: C1=%s C2=%s C3=%s -> %s", pair_id, level,
-                    c1, c2, c3, "PASS" if entry["passed"] else "FAIL")
+        logger.info("[%s] %s: C1=%s C2=%s C3=%s (max path delta %.2fm) -> %s",
+                    pair_id, level, c1, c2, c3,
+                    entry["max_shortest_path_delta"],
+                    "PASS" if entry["passed"] else "FAIL")
     return result
 
 

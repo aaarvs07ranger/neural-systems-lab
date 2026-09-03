@@ -64,10 +64,16 @@ def build_env_config(ppo_cfg: PPOConfig) -> ObjectNavConfig:
     # the task config turns the task into an ordered itinerary. Absent, this is
     # T1 and behaves exactly as it always has.
     sequence = tuple(task.get("target_sequence", ()) or ())
+    # One oracle distance table per pair, measured in house A, shared by every
+    # variant so A and B are scored with the same yardstick (see
+    # ObjectNavConfig.oracle_path_table). Absent during training in A, where the
+    # env simply measures its own -- which is the same number by construction.
+    oracle = TASK_CONFIG_PATH.parent / "oracle_paths.json"
     return ObjectNavConfig(
         target_object_type=task["target_object_type"],
         target_sequence=sequence,
         max_steps=ppo_cfg.max_episode_steps,
+        oracle_path_table=str(oracle) if oracle.exists() else None,
     )
 
 

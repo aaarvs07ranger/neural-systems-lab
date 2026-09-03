@@ -142,12 +142,37 @@ def scan_pair(
         controller.stop()
 
 
+def harvest_pickupable_types(controller, dataset, n_houses: int = 40) -> Set[str]:
+    """Ask the simulator which object types can be picked up.
+
+    L3 clutter has to be small enough to rest on a counter. "Appears on a
+    surface in the dataset" was not a tight enough filter: it admitted a
+    Television and a Desktop, which overhang the counter, fall to the floor and
+    block navigation. THOR already knows the answer -- pickupable objects are
+    exactly the hand-sized ones -- so read it off the metadata rather than
+    hand-listing sizes.
+    """
+    pickupable: Set[str] = set()
+    for idx in range(min(n_houses, len(dataset))):
+        try:
+            controller.reset(scene=dataset[idx])
+        except Exception:
+            continue
+        for obj in controller.last_event.metadata["objects"]:
+            if obj.get("pickupable"):
+                pickupable.add(obj["objectType"])
+    logger.info("pickupable object types (valid L3 clutter): %d", len(pickupable))
+    return pickupable
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pair", type=str, default=None)
     parser.add_argument("--max-candidates", type=int, default=6,
                         help="candidate assets to test per object")
+    parser.add_argument("--pickupable-houses", type=int, default=40,
+                        help="dataset houses to scan for the pickupable-type list")
     parser.add_argument("--target-candidates", type=int, default=40,
                         help="candidates to test for the TARGET type (searched "
                              "exhaustively: keeping the target swappable is what "
@@ -165,6 +190,20 @@ def main() -> None:
     dataset = prior.load_dataset(gen_cfg.dataset,
                                  revision=gen_cfg.dataset_revision)[gen_cfg.split]
     asset_pool = harvest_asset_pool(dataset, gen_cfg.scan_limit)
+
+    # One shared list for every pair; written before the per-pair scans so a
+    # later crash still leaves it usable.
+    first_house = json.loads(pair_house_path(pair_ids[0], "A").read_text())
+    probe_cfg = ObjectNavConfig()
+    probe = _make_controller(probe_cfg, first_house)
+    try:
+        pickupable = harvest_pickupable_types(probe, dataset, args.pickupable_houses)
+    finally:
+        probe.stop()
+    (DATA_DIR / "pickupable_types.json").write_text(
+        json.dumps({"n_houses_scanned": args.pickupable_houses,
+                    "types": sorted(pickupable)}, indent=2))
+    logger.info("wrote %s", DATA_DIR / "pickupable_types.json")
 
     for pair_id in pair_ids:
         result = scan_pair(pair_id, asset_pool, args.max_candidates,

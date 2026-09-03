@@ -107,6 +107,19 @@ class ObjectNavConfig:
     # ``max_steps`` is the budget PER LEG, so a 3-leg episode gets 600 steps and
     # the per-leg budget stays constant across tasks.
     target_sequence: Tuple[str, ...] = ()
+    # Path to a precomputed oracle-distance table measured in house A (written
+    # by envs/verify_pairs.py). When set, an episode started with an explicit
+    # seed present in the table uses A's distances instead of measuring its own.
+    #
+    # Why: the walk to a target ends at the target's SURFACE. Swapping in a
+    # different-shaped asset of the same type moves that surface, so the
+    # measured distance shifts by up to ~1.3 m even though the floor and the
+    # object's position are unchanged. Since SPL divides by this distance, the
+    # two variants would otherwise be scored with different yardsticks. One
+    # yardstick, taken from A, keeps A and B directly comparable; the residual
+    # bias is identical for every baseline, so cross-baseline claims are
+    # unaffected. Raw per-seed deltas are recorded in verification.json.
+    oracle_path_table: Optional[str] = None
 
 
 class ProcTHORObjectNavEnv(gym.Env):
@@ -157,6 +170,8 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._leg_steps: List[int] = []
         self._leg_paths: List[float] = []
         self._oracle_legs: List[float] = []
+        self._oracle_table: Optional[Dict[str, Any]] = None
+        self._oracle_source: str = "measured"
 
     # ------------------------------------------------------------------
     # Controller lifecycle
@@ -309,6 +324,32 @@ class ProcTHORObjectNavEnv(gym.Env):
             self._last_path_end = dict(nearest["position"])
             return float(_xz_distance(start, nearest["position"]))
 
+    def _load_oracle_table(self) -> Dict[str, Any]:
+        """Read the house-A distance table once, if one was configured."""
+        if self._oracle_table is None:
+            path = getattr(self._cfg, "oracle_path_table", None)
+            if path and Path(path).exists():
+                self._oracle_table = json.loads(Path(path).read_text()).get("seeds", {})
+                logger.info("[%s] using oracle distances measured in house A (%s)",
+                            self.name, path)
+            else:
+                self._oracle_table = {}
+        return self._oracle_table
+
+    def _oracle_for_seed(self, seed: Optional[int], start: Vec3) -> Optional[List[float]]:
+        """A's distances for this episode, if available and the start matches."""
+        if seed is None:
+            return None
+        entry = self._load_oracle_table().get(str(seed))
+        if not entry:
+            return None
+        stored = entry.get("start_position", {})
+        if any(abs(stored.get(k, 0.0) - start.get(k, 0.0)) > 1e-3 for k in ("x", "z")):
+            logger.warning("[%s] seed %s start pose differs from the oracle table "
+                           "- measuring instead", self.name, seed)
+            return None
+        return [float(x) for x in entry["legs"]]
+
     def _oracle_chain(self, start: Vec3) -> List[float]:
         """Per-leg geodesic lengths for the shortest route visiting the whole
         itinerary in order: start -> T1 -> T2 -> ...
@@ -366,7 +407,11 @@ class ProcTHORObjectNavEnv(gym.Env):
         self._leg_steps = []
         self._leg_paths = []
         self._prev_dist, _ = self._target_state(metadata)
-        self._oracle_legs = self._oracle_chain(start_pos)
+        cached = self._oracle_for_seed(seed, start_pos)
+        if cached is not None:
+            self._oracle_legs, self._oracle_source = cached, "house_a_table"
+        else:
+            self._oracle_legs, self._oracle_source = self._oracle_chain(start_pos), "measured"
         self._shortest_path = float(sum(self._oracle_legs))
         self._last_frame = self._frame_to_obs(event)
 
@@ -376,6 +421,7 @@ class ProcTHORObjectNavEnv(gym.Env):
             "distance_to_target": self._prev_dist,
             "n_legs": len(self._sequence),
             "current_target": self._sequence[0],
+            "oracle_source": self._oracle_source,
         }
         return self._last_frame, info
 
@@ -451,6 +497,7 @@ class ProcTHORObjectNavEnv(gym.Env):
                 leg_steps=list(self._leg_steps),
                 leg_path_lengths=[round(x, 4) for x in self._leg_paths],
                 oracle_leg_lengths=[round(x, 4) for x in self._oracle_legs],
+                oracle_source=self._oracle_source,
             )
         return self._last_frame, float(reward), terminated, truncated, info
 
