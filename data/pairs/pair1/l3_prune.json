@@ -1,0 +1,13 @@
+{
+  "pair": "pair1",
+  "n_placed": 4,
+  "n_kept": 4,
+  "kept": [
+    "Apple|distractor|3",
+    "CD|distractor|2",
+    "DeskLamp|distractor|0",
+    "Pan|distractor|1"
+  ],
+  "dropped": [],
+  "n_reachable_reference": 162
+}

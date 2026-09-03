@@ -1,0 +1,69 @@
+{
+  "pair_id": "pair4",
+  "target_object_type": "Television",
+  "n_eval_seeds": 25,
+  "reference": {
+    "n_reachable": 681,
+    "n_target_instances": 1
+  },
+  "levels": {
+    "L1": {
+      "C1_reachable_positions_identical": true,
+      "C2_start_poses_identical": true,
+      "C3_target_instance_count_identical": true,
+      "passed": true,
+      "n_reachable": 681,
+      "n_reachable_reference": 681,
+      "n_missing_positions": 0,
+      "n_extra_positions": 0,
+      "n_target_instances": 1,
+      "n_mismatched_start_poses": 0,
+      "mismatched_shortest_paths": [],
+      "n_mismatched_shortest_paths": 0,
+      "max_shortest_path_delta": 0.0
+    },
+    "L2": {
+      "C1_reachable_positions_identical": true,
+      "C2_start_poses_identical": true,
+      "C3_target_instance_count_identical": true,
+      "passed": true,
+      "n_reachable": 681,
+      "n_reachable_reference": 681,
+      "n_missing_positions": 0,
+      "n_extra_positions": 0,
+      "n_target_instances": 1,
+      "n_mismatched_start_poses": 0,
+      "mismatched_shortest_paths": [
+        {
+          "seed": 10003,
+          "a": 3.5061423847555133,
+          "b": 3.508472853553081
+        }
+      ],
+      "n_mismatched_shortest_paths": 1,
+      "max_shortest_path_delta": 0.0023
+    },
+    "L3": {
+      "C1_reachable_positions_identical": true,
+      "C2_start_poses_identical": true,
+      "C3_target_instance_count_identical": true,
+      "passed": true,
+      "n_reachable": 681,
+      "n_reachable_reference": 681,
+      "n_missing_positions": 0,
+      "n_extra_positions": 0,
+      "n_target_instances": 1,
+      "n_mismatched_start_poses": 0,
+      "mismatched_shortest_paths": [
+        {
+          "seed": 10003,
+          "a": 3.5061423847555133,
+          "b": 3.508472853553081
+        }
+      ],
+      "n_mismatched_shortest_paths": 1,
+      "max_shortest_path_delta": 0.0023
+    }
+  },
+  "passed": true
+}

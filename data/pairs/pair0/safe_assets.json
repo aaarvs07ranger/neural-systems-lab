@@ -1,0 +1,317 @@
+{
+  "pair_id": "pair0",
+  "target_object_type": "Fridge",
+  "reference_reachable": 380,
+  "n_candidates_tested": 136,
+  "n_safe": 107,
+  "target_swappable": true,
+  "objects": {
+    "CounterTop|2|0": {
+      "type": "CounterTop",
+      "original": "Countertop_I_8x2",
+      "safe": [],
+      "unsafe": [
+        "Countertop_C_10x10",
+        "Countertop_C_10x6",
+        "Countertop_C_8x10",
+        "Countertop_C_8x4",
+        "Countertop_C_8x6",
+        "Countertop_I_4x2"
+      ]
+    },
+    "Apple|surface|2|0": {
+      "type": "Apple",
+      "original": "Apple_24",
+      "safe": [
+        "Apple_10",
+        "Apple_11",
+        "Apple_14",
+        "Apple_15",
+        "Apple_18",
+        "Apple_19"
+      ],
+      "unsafe": []
+    },
+    "Egg|surface|2|1": {
+      "type": "Egg",
+      "original": "Egg_23",
+      "safe": [
+        "Egg_10",
+        "Egg_11",
+        "Egg_14",
+        "Egg_15",
+        "Egg_18",
+        "Egg_19"
+      ],
+      "unsafe": []
+    },
+    "SprayBottle|surface|2|2": {
+      "type": "SprayBottle",
+      "original": "Spray_Bottle_8",
+      "safe": [
+        "Spray_Bottle_2",
+        "Spray_Bottle_3",
+        "Spray_Bottle_4",
+        "Spray_Bottle_6",
+        "Spray_Bottle_7"
+      ],
+      "unsafe": []
+    },
+    "Lettuce|surface|2|3": {
+      "type": "Lettuce",
+      "original": "Lettuce_19",
+      "safe": [
+        "Lettuce_10",
+        "Lettuce_11",
+        "Lettuce_14",
+        "Lettuce_15",
+        "Lettuce_18",
+        "Lettuce_2"
+      ],
+      "unsafe": []
+    },
+    "SaltShaker|surface|2|4": {
+      "type": "SaltShaker",
+      "original": "RoboTHOR_salt_pepper_shaker_bnyd_salt_v",
+      "safe": [
+        "Salt_Shaker_1",
+        "Salt_Shaker_2"
+      ],
+      "unsafe": []
+    },
+    "Tomato|surface|2|7": {
+      "type": "Tomato",
+      "original": "Tomato_5",
+      "safe": [
+        "Tomato_10",
+        "Tomato_11",
+        "Tomato_14",
+        "Tomato_15",
+        "Tomato_18",
+        "Tomato_19"
+      ],
+      "unsafe": []
+    },
+    "Potato|surface|2|9": {
+      "type": "Potato",
+      "original": "Potato_6",
+      "safe": [
+        "Potato_10",
+        "Potato_11",
+        "Potato_14",
+        "Potato_15",
+        "Potato_18",
+        "Potato_19"
+      ],
+      "unsafe": []
+    },
+    "Bowl|surface|2|11": {
+      "type": "Bowl",
+      "original": "Bowl_22",
+      "safe": [
+        "Bowl_10",
+        "Bowl_11",
+        "Bowl_14",
+        "Bowl_15",
+        "Bowl_18",
+        "Bowl_19"
+      ],
+      "unsafe": []
+    },
+    "Pencil|surface|2|13": {
+      "type": "Pencil",
+      "original": "Pencil_3",
+      "safe": [
+        "Pencil_4",
+        "Pencil_5",
+        "Pencil_7",
+        "RoboTHOR_pencil_amazon_basics_v"
+      ],
+      "unsafe": []
+    },
+    "SoapBottle|surface|2|14": {
+      "type": "SoapBottle",
+      "original": "Soap_Bottle_3",
+      "safe": [
+        "Soap_Bottle_10",
+        "Soap_Bottle_11",
+        "Soap_Bottle_14",
+        "Soap_Bottle_15",
+        "Soap_Bottle_18",
+        "Soap_Bottle_19"
+      ],
+      "unsafe": []
+    },
+    "Plate|surface|2|15": {
+      "type": "Plate",
+      "original": "Plate_11",
+      "safe": [
+        "Plate_10",
+        "Plate_14",
+        "Plate_15",
+        "Plate_18",
+        "Plate_19",
+        "Plate_2"
+      ],
+      "unsafe": []
+    },
+    "Ladle|surface|2|16": {
+      "type": "Ladle",
+      "original": "Ladle_1",
+      "safe": [
+        "Ladle_2",
+        "Ladle_3"
+      ],
+      "unsafe": []
+    },
+    "Fork|surface|2|17": {
+      "type": "Fork",
+      "original": "Fork_1",
+      "safe": [
+        "RoboTHOR_fork_ai2_v"
+      ],
+      "unsafe": []
+    },
+    "Fridge|2|1": {
+      "type": "Fridge",
+      "original": "Fridge_19",
+      "safe": [
+        "Fridge_15",
+        "Fridge_29",
+        "Fridge_7"
+      ],
+      "unsafe": [
+        "Fridge_1",
+        "Fridge_10",
+        "Fridge_14",
+        "Fridge_18",
+        "Fridge_2",
+        "Fridge_20",
+        "Fridge_21",
+        "Fridge_22",
+        "Fridge_23",
+        "Fridge_24",
+        "Fridge_26",
+        "Fridge_27",
+        "Fridge_3",
+        "Fridge_5",
+        "Fridge_6",
+        "Fridge_9"
+      ]
+    },
+    "Lettuce|surface|2|10": {
+      "type": "Lettuce",
+      "original": "Lettuce_7",
+      "safe": [
+        "Lettuce_10",
+        "Lettuce_11",
+        "Lettuce_14",
+        "Lettuce_15",
+        "Lettuce_18",
+        "Lettuce_19"
+      ],
+      "unsafe": []
+    },
+    "Potato|surface|2|12": {
+      "type": "Potato",
+      "original": "Potato_2",
+      "safe": [
+        "Potato_10",
+        "Potato_11",
+        "Potato_14",
+        "Potato_15",
+        "Potato_18",
+        "Potato_19"
+      ],
+      "unsafe": []
+    },
+    "HousePlant|2|2|0": {
+      "type": "HousePlant",
+      "original": "Houseplant_11",
+      "safe": [
+        "Houseplant_15"
+      ],
+      "unsafe": [
+        "Houseplant_10",
+        "Houseplant_14",
+        "Houseplant_18",
+        "Houseplant_19",
+        "Houseplant_2"
+      ]
+    },
+    "GarbageCan|2|3": {
+      "type": "GarbageCan",
+      "original": "bin_25",
+      "safe": [
+        "bin_1",
+        "bin_10",
+        "bin_13",
+        "bin_14",
+        "bin_17",
+        "bin_18"
+      ],
+      "unsafe": []
+    },
+    "GarbageBag|2|4": {
+      "type": "GarbageBag",
+      "original": "GarbageBag_21_2",
+      "safe": [
+        "GarbageBag_21_1"
+      ],
+      "unsafe": []
+    },
+    "Painting|2|5": {
+      "type": "Painting",
+      "original": "Wall_Decor_Photo_1V",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7"
+      ],
+      "unsafe": []
+    },
+    "Painting|2|6": {
+      "type": "Painting",
+      "original": "Wall_Decor_Photo_2",
+      "safe": [
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_7"
+      ],
+      "unsafe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_6"
+      ]
+    },
+    "Painting|2|7": {
+      "type": "Painting",
+      "original": "Wall_Decor_Painting_3V",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7",
+        "Wall_Decor_Painting_8"
+      ],
+      "unsafe": []
+    },
+    "Painting|2|8": {
+      "type": "Painting",
+      "original": "Wall_Decor_Photo_6",
+      "safe": [
+        "Wall_Decor_Painting_10",
+        "Wall_Decor_Painting_1V",
+        "Wall_Decor_Painting_3",
+        "Wall_Decor_Painting_3V",
+        "Wall_Decor_Painting_6",
+        "Wall_Decor_Painting_7"
+      ],
+      "unsafe": []
+    }
+  }
+}

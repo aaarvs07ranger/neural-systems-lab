@@ -1,0 +1,24 @@
+{
+  "pair": "pair0",
+  "n_placed": 4,
+  "n_kept": 2,
+  "kept": [
+    "DeskLamp|distractor|0",
+    "Mug|distractor|3"
+  ],
+  "dropped": [
+    {
+      "id": "BaseballBat|distractor|1",
+      "cells_freed": 3,
+      "cells_blocked_before": 7,
+      "reason": "blocked floor the agent can stand on"
+    },
+    {
+      "id": "Candle|distractor|2",
+      "cells_freed": 4,
+      "cells_blocked_before": 4,
+      "reason": "blocked floor the agent can stand on"
+    }
+  ],
+  "n_reachable_reference": 380
+}

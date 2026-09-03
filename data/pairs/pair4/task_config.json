@@ -1,0 +1,20 @@
+{
+  "pair_id": "pair4",
+  "dataset": "procthor-10k",
+  "dataset_revision": "ab3cacd0fc17754d4c080a3fd50b18395fae8647",
+  "split": "train",
+  "house_index": 286,
+  "target_object_type": "Television",
+  "variant_seed": 1341,
+  "n_rooms": 2,
+  "n_objects": 36,
+  "levels": {
+    "L1": "b_L1.json",
+    "L2": "b_L2.json",
+    "L3": "b_L3.json"
+  },
+  "n_distractors_requested": 8,
+  "n_distractors_placed": {
+    "L3": 8
+  }
+}
