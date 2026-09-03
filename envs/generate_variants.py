@@ -577,7 +577,26 @@ def _apply_l3(
         distractor = {
             "assetId": rng.choice(assets),
             "id": f"{obj_type}{DISTRACTOR_TAG}{i}",
-            "kinematic": False,
+            # KINEMATIC: the object stays exactly where this file puts it.
+            #
+            # Physics-enabled clutter was the single most persistent source of
+            # failure in this benchmark. An item can slide off its surface, and
+            # a round one (a pan, on pair1) rolls to a slightly different
+            # resting place each load. On the floor it blocks cells the agent
+            # must start from, and because the outcome varies per load, a house
+            # could pass the C1-C3 gate three times and fail on the fourth --
+            # which is exactly what happened, twice, and what finally broke a
+            # live grid run on eval seed 10016.
+            #
+            # No amount of re-testing fixes a coin flip. Freezing the object
+            # removes the coin: it cannot fall, roll, or drift, so the file is
+            # the ground truth and every load is identical by construction.
+            #
+            # Scientifically free: L3 exists to add irrelevant things to LOOK
+            # at, and the action space is move/rotate/look, so the agent can
+            # never touch clutter. The large furniture in these ProcTHOR houses
+            # is already kinematic. Disclose it in the protocol section.
+            "kinematic": True,
             "position": position,
             "rotation": {"x": -0.0, "y": float(rng.randrange(0, 360, 30)), "z": -0.0},
         }

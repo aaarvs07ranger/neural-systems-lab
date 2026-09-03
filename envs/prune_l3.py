@@ -96,6 +96,42 @@ def _settled_positions(controller, house: House) -> Dict[str, Dict[str, float]]:
     return out
 
 
+def _displaced_distractors(
+    controller, house: House, planned: Dict[str, Dict[str, float]],
+) -> Dict[str, float]:
+    """Distractors that did not stay where the file put them.
+
+    Clutter is written kinematic, so it should be exactly at its planned
+    position. If it is not, either the engine ignored the flag or something
+    moved it -- and an item that ends up somewhere the file does not record is
+    an item nobody verified. Reported, not assumed.
+    """
+    settled = _settled_positions(controller, house)
+    out = {}
+    for oid, pos in settled.items():
+        want = next((v for k, v in planned.items() if k in oid or oid in k), None)
+        if want is None:
+            continue
+        d = sum((pos[k] - want[k]) ** 2 for k in ("x", "y", "z")) ** 0.5
+        if d > SETTLE_TOLERANCE:
+            out[oid] = d
+    return out
+
+
+def _planned_positions(house: House) -> Dict[str, Dict[str, float]]:
+    """Where the house file says each distractor is."""
+    out: Dict[str, Dict[str, float]] = {}
+
+    def walk(objects):
+        for obj in objects:
+            if DISTRACTOR_TAG in str(obj.get("id", "")):
+                out[str(obj["id"])] = dict(obj["position"])
+            walk(obj.get("children", []) or [])
+
+    walk(house.get("objects", []))
+    return out
+
+
 def _unstable_distractors(controller, house: House, trials: int) -> Dict[str, float]:
     """Distractors that do not land in the same place on every load.
 
@@ -196,6 +232,16 @@ def prune_pair(
     # asking what blocks what. An unstable object makes every later measurement
     # a coin flip, so removing it first is what makes the rest meaningful.
     drift = _unstable_distractors(controller, house_l3, STABILITY_TRIALS)
+    # Kinematic clutter must sit exactly where the file puts it. Merge any
+    # displacement in with the load-to-load drift so both are dropped the same
+    # way -- an item the engine moved is no more trustworthy than one that
+    # moves differently each time.
+    displaced = _displaced_distractors(controller, house_l3,
+                                       _planned_positions(house_l3))
+    for oid, d in displaced.items():
+        drift[oid] = max(drift.get(oid, 0.0), d)
+        logger.warning("[%s] %s settled %.3f m from where the file puts it "
+                       "(kinematic clutter should not move at all)", pair_id, oid, d)
     # THOR's runtime objectId is not always the house-JSON id verbatim, so match
     # on the unique distractor tag both share.
     dropped: List[Dict[str, Any]] = []

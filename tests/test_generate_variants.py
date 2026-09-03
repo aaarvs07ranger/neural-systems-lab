@@ -270,6 +270,28 @@ def test_l3_distractors_are_never_placed_on_top_of_each_other() -> None:
                 )
 
 
+def test_l3_distractors_are_kinematic() -> None:
+    """Clutter must not be physics-enabled.
+
+    Physics-enabled clutter was the most persistent source of failure in this
+    benchmark: an item slides off its surface, a round one rolls to a slightly
+    different resting place each load, and on the floor it blocks cells the
+    agent must start from. Because the outcome varies per load, a house could
+    pass the C1-C3 gate three times and fail on the fourth -- which is what
+    broke a live grid run on 2026-09-03 (eval seed 10016, pair1 L3). Freezing
+    the object makes the file the ground truth.
+    """
+    for seed in (SEED, 7, 99):
+        variant, _ = build("L3", seed=seed)
+        placed = distractors(variant)
+        assert placed, f"seed {seed} placed no distractors to check"
+        for obj in placed:
+            assert obj.get("kinematic") is True, (
+                f"{obj['id']} is not kinematic — it can fall onto the floor "
+                "and block a start pose"
+            )
+
+
 if __name__ == "__main__":
     fns = [(n, f) for n, f in sorted(globals().items())
            if n.startswith("test_") and callable(f)]
