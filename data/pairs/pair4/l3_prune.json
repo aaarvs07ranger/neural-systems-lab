@@ -13,5 +13,7 @@
     "TennisRacket|distractor|6"
   ],
   "dropped": [],
-  "n_reachable_reference": 681
+  "n_reachable_reference": 681,
+  "n_pinned_poses_checked": 25,
+  "stability_trials": 3
 }

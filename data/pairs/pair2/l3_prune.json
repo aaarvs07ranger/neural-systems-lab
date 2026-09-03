@@ -13,5 +13,7 @@
     "WineBottle|distractor|4"
   ],
   "dropped": [],
-  "n_reachable_reference": 128
+  "n_reachable_reference": 128,
+  "n_pinned_poses_checked": 25,
+  "stability_trials": 3
 }

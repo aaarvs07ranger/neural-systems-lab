@@ -1,5 +1,6 @@
 {
   "pair_id": "pair2",
+  "oracle_seeds_disagreeing_with_house_a": 0,
   "target_object_type": "Bed",
   "n_eval_seeds": 25,
   "reference": {

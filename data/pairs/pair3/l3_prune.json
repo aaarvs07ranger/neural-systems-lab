@@ -14,10 +14,12 @@
   "dropped": [
     {
       "id": "Bread|distractor|2",
-      "cells_freed": 3,
-      "cells_blocked_before": 3,
-      "reason": "blocked floor the agent can stand on"
+      "defects_freed": 4,
+      "defects_before": 4,
+      "reason": "blocked floor or a pinned eval start pose"
     }
   ],
-  "n_reachable_reference": 460
+  "n_reachable_reference": 460,
+  "n_pinned_poses_checked": 25,
+  "stability_trials": 3
 }

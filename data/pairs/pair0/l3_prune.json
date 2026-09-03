@@ -9,16 +9,18 @@
   "dropped": [
     {
       "id": "BaseballBat|distractor|1",
-      "cells_freed": 3,
-      "cells_blocked_before": 7,
-      "reason": "blocked floor the agent can stand on"
+      "defects_freed": 3,
+      "defects_before": 7,
+      "reason": "blocked floor or a pinned eval start pose"
     },
     {
       "id": "Candle|distractor|2",
-      "cells_freed": 4,
-      "cells_blocked_before": 4,
-      "reason": "blocked floor the agent can stand on"
+      "defects_freed": 4,
+      "defects_before": 4,
+      "reason": "blocked floor or a pinned eval start pose"
     }
   ],
-  "n_reachable_reference": 380
+  "n_reachable_reference": 380,
+  "n_pinned_poses_checked": 25,
+  "stability_trials": 3
 }
