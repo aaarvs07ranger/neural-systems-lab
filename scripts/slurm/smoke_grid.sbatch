@@ -84,6 +84,17 @@ echo "=== [smoke] checking results ==="
 set +e
 fail=0
 
+# 0. The expected number of cells must actually exist. Without this, every
+#    check below passes vacuously when nothing ran -- silence is not success.
+n_summaries=$(ls "${SMOKE_ROOT}"/*/tables/*_transfer_summary.csv 2>/dev/null | wc -l)
+if [ "${n_summaries}" -ne 8 ]; then
+    echo "  FAIL ${n_summaries} summaries found, expected 8 (4 baselines on" \
+         "pair0 + ppo on pairs 1-4)"
+    fail=1
+else
+    echo "  OK  8 summaries present"
+fi
+
 # 1. Every run must have walked all four houses, not just A and B.
 for d in "${SMOKE_ROOT}"/*/tables/*_transfer_summary.csv; do
     [ -e "$d" ] || continue
@@ -98,8 +109,15 @@ print(','.join(sorted(df['level'].astype(str))))" "$d")
 done
 
 # 2. The oracle table must be USED, never silently fallen back from.
-fallbacks=$(grep -c "measuring instead" \
-    "/gscratch/scrubbed/${USER}/nsl-runs/slurm-nsl-smokegrid-${SLURM_JOB_ID}.out" || true)
+SMOKE_LOG="/gscratch/scrubbed/${USER}/nsl-runs/slurm-nsl-smokegrid-${SLURM_JOB_ID}.out"
+if [ ! -r "${SMOKE_LOG}" ]; then
+    # A missing log makes both log-based checks vacuous, so it is a failure in
+    # its own right rather than a reason to skip them.
+    echo "  FAIL cannot read ${SMOKE_LOG} — log-based checks could not run"
+    fail=1
+fi
+fallbacks=$(grep -c "measuring instead" "${SMOKE_LOG}" 2>/dev/null || true)
+fallbacks="${fallbacks:-0}"
 if [ "${fallbacks}" -gt 0 ]; then
     echo "  FAIL ${fallbacks} oracle-table fallbacks -- start poses do not match" \
          "the table, so SPL denominators are being measured per house again."
@@ -112,6 +130,9 @@ fi
 python - <<'PYEOF'
 import re, sys, os
 log = f"/gscratch/scrubbed/{os.environ['USER']}/nsl-runs/slurm-nsl-smokegrid-{os.environ['SLURM_JOB_ID']}.out"
+if not os.path.exists(log):
+    print(f"  FAIL log {log} missing -- pose-split check could not run")
+    sys.exit(1)
 pat = re.compile(r"sampling starts from the '(train|eval)' slice \((\d+) of (\d+) cells")
 seen = {}
 for line in open(log, errors="ignore"):
@@ -119,6 +140,10 @@ for line in open(log, errors="ignore"):
     if m:
         seen.setdefault((m.group(1), m.group(3)), set()).add(m.group(2))
 bad = False
+if not seen:
+    print("  FAIL no pose-split lines in the log -- the holdout never engaged, "
+          "so training and evaluation shared the whole floor")
+    bad = True
 for (split, total), counts in sorted(seen.items()):
     print(f"  {split:5s} slice: {sorted(counts)} of {total} cells")
     if len(counts) != 1:
