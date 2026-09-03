@@ -9,7 +9,10 @@
 # builder that all four baselines now go through.
 #
 # Two tiers, because the ladder loop and the pair loop are each ONE code path --
-# running all 4 x 5 x 3 combinations would test the same lines sixty times.
+# running all 4 x 5 x 3 combinations would test the same lines sixty times. The
+# EVAL side is not sampled that way: every cell runs all 25 episodes, because
+# each pinned start pose is an independent thing that can be individually
+# broken and only running them all can prove none is.
 #
 #   Tier 1  all four baselines on pair0, full ladder. Each baseline has its own
 #           env bridge and the shared-builder change touched all of them, so
@@ -62,7 +65,13 @@ run_cell () {                      # baseline, pair
     # --smoke shrinks the budget; --pair selects the cell. Train and eval are
     # separate stages so neither can trigger house generation.
     python main.py --smoke --baseline "${baseline}" --pair "${pair}" --stage train
-    python main.py --smoke --baseline "${baseline}" --pair "${pair}" --stage eval
+    # ALL 25 eval episodes, not the smoke default of 3. The 3-episode smoke
+    # passed on 2026-09-03 and the grid then failed on eval seed 10016 -- a
+    # pinned start pose the smoke had never touched. The pinned poses are the
+    # thing most likely to be individually broken, so every one of them must be
+    # exercised. Costs a couple of minutes; the alternative cost three days.
+    python main.py --smoke --baseline "${baseline}" --pair "${pair}" --stage eval \
+        --episodes 25
 }
 
 # --- Tier 1: every baseline, full ladder ----------------------------------
