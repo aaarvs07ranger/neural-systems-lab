@@ -1,29 +1,18 @@
 {
   "pair": "pair0",
   "n_placed": 4,
-  "n_kept": 0,
-  "kept": [],
+  "n_kept": 3,
+  "kept": [
+    "BaseballBat|distractor|1",
+    "Candle|distractor|2",
+    "DeskLamp|distractor|0"
+  ],
   "dropped": [
     {
-      "id": "DeskLamp|distractor|0",
-      "defects_freed": 24,
-      "defects_before": 24,
-      "reason": "blocked floor or a pinned eval start pose"
-    },
-    {
-      "id": "BaseballBat|distractor|1",
-      "cells_freed": 0,
-      "reason": "joint blockage"
-    },
-    {
-      "id": "Candle|distractor|2",
-      "cells_freed": 0,
-      "reason": "joint blockage"
-    },
-    {
       "id": "Mug|distractor|3",
-      "cells_freed": 0,
-      "reason": "joint blockage"
+      "defects_freed": 23,
+      "defects_before": 23,
+      "reason": "blocked floor or a pinned eval start pose"
     }
   ],
   "n_unstable_dropped": 0,
