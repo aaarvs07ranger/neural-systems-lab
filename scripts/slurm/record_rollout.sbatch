@@ -23,9 +23,15 @@
 #SBATCH --output=/gscratch/scrubbed/%u/nsl-runs/slurm-%x-%j.out
 
 set -euo pipefail
+# usage: sbatch record_rollout.sbatch <baseline> <pair> <seeds> [run-dir]
+#   sbatch scripts/slurm/record_rollout.sbatch ppo pair0 10006,10020
 BASELINE="${1:-ppo}"
-SRC_DIR="${2:-results_seed0}"
+PAIR="${2:-pair0}"
 SEEDS="${3:-10006,10020}"
+# The grid writes each cell to grid/<baseline>/<pair>_seed<N>; seed 0 is the
+# default source because a filmstrip only needs one trained agent, and PPO's
+# predict(deterministic=True) makes it exactly reproducible.
+SRC_DIR="${4:-grid/${BASELINE}/${PAIR}_seed0}"
 GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
 
 source "${GSCRATCH_ROOT}/miniforge3/etc/profile.d/conda.sh" 2>/dev/null \
@@ -35,8 +41,27 @@ conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
 export PYTHONUNBUFFERED=1
 export NSL_THOR_PLATFORM=cloudrendering
 cd "${SLURM_SUBMIT_DIR}"
-export NSL_RESULTS_DIR="${SLURM_SUBMIT_DIR}/${SRC_DIR}"
+# Checkpoints live on scrubbed (the grid's run root), not in the repo.
+RUN_ROOT="${NSL_RUN_ROOT:-/gscratch/scrubbed/${USER}/nsl-runs}"
+export NSL_RESULTS_DIR="${RUN_ROOT}/${SRC_DIR}"
+# The protocol the grid ran, so the recorded episodes ARE the ones the tables
+# describe -- same held-out slice, same pinned start poses.
+export NSL_POSE_HOLDOUT=1
+export NSL_PAIR="${PAIR}"
 
-echo "[slurm] recording ${BASELINE} rollouts from ${NSL_RESULTS_DIR}, eval seeds ${SEEDS}"
-python scripts/record_rollout.py --baseline "${BASELINE}" --seeds "${SEEDS}"
+if [ ! -d "${NSL_RESULTS_DIR}/checkpoints" ]; then
+    echo "[slurm] no checkpoints under ${NSL_RESULTS_DIR} — pass the run dir as \$4"
+    exit 1
+fi
+
+echo "[slurm] recording ${BASELINE} on ${PAIR} from ${NSL_RESULTS_DIR}, eval seeds ${SEEDS}"
+python scripts/record_rollout.py --baseline "${BASELINE}" --pair "${PAIR}" \
+    --seeds "${SEEDS}"
+
+# Filmstrips are paper figures and belong in the repo; GIFs are large and stay
+# on scrubbed (they are gitignored anyway).
+DEST="${SLURM_SUBMIT_DIR}/results/plots"
+mkdir -p "${DEST}"
+cp -f "${NSL_RESULTS_DIR}/plots/"*rollout*.png "${DEST}/" 2>/dev/null || true
+echo "[slurm] filmstrips copied to ${DEST}"
 echo "[slurm] done — filmstrips in ${NSL_RESULTS_DIR}/plots, GIFs in ${NSL_RESULTS_DIR}/videos"
