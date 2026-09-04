@@ -1,28 +1,19 @@
 {
   "pair": "pair4",
   "n_placed": 8,
-  "n_kept": 6,
+  "n_kept": 8,
   "kept": [
     "Bottle|distractor|2",
     "ButterKnife|distractor|7",
+    "CD|distractor|0",
     "Newspaper|distractor|5",
     "Plate|distractor|3",
     "Spatula|distractor|1",
+    "TeddyBear|distractor|4",
     "TennisRacket|distractor|6"
   ],
-  "dropped": [
-    {
-      "id": "CD|distractor|0",
-      "max_drift_m": 0.0527,
-      "reason": "does not settle in the same place on every load"
-    },
-    {
-      "id": "TeddyBear|distractor|4",
-      "max_drift_m": 0.0412,
-      "reason": "does not settle in the same place on every load"
-    }
-  ],
-  "n_unstable_dropped": 2,
+  "dropped": [],
+  "n_unstable_dropped": 0,
   "settle_tolerance_m": 0.02,
   "n_reachable_reference": 681,
   "n_pinned_poses_checked": 25,
