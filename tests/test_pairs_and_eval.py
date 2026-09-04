@@ -286,6 +286,38 @@ def test_every_committed_variant_is_verified() -> None:
             assert entry["passed"], f"pair{i} {level} did not pass"
 
 
+def test_every_committed_house_is_a_static_scene() -> None:
+    """Nothing in any house may be physics-enabled.
+
+    The env resets by Teleport alone, which is valid only if the scene cannot
+    mutate. It could: the agent's collider shoves movable objects as it walks,
+    measured at up to 10 cm over 600 steps. Across an evaluation that drift
+    accumulates until an object comes to rest on a start pose, and the episode
+    raises -- and it silently degraded training too, where one house takes 150k
+    steps without ever being reloaded.
+    """
+    import json as _json
+
+    for i in range(config.GenerationConfig().n_pairs):
+        for name in ("a.json", "b_L1.json", "b_L2.json", "b_L3.json"):
+            path = config.pair_dir(f"pair{i}") / name
+            if not path.exists():
+                continue
+            house = _json.loads(path.read_text())
+
+            def walk(objects):
+                for obj in objects:
+                    yield obj
+                    yield from walk(obj.get("children", []) or [])
+
+            movable = [o.get("id") for o in walk(house.get("objects", []))
+                       if o.get("kinematic") is not True]
+            assert not movable, (
+                f"pair{i}/{name} has {len(movable)} movable object(s), "
+                f"e.g. {movable[:3]} — the agent can push them onto a start pose"
+            )
+
+
 def main() -> None:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

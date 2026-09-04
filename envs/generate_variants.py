@@ -676,6 +676,37 @@ def _strip_visuals(house: House) -> House:
     return stripped
 
 
+def _freeze_scene(house: House) -> int:
+    """Make every object immovable. Returns how many were changed.
+
+    The environment resets by Teleport alone, roughly 100x faster than reloading
+    the scene, which is valid ONLY if nothing in the scene can mutate. That
+    assumption was never true: the agent has no interaction actions, but its
+    collider still shoves physics-enabled objects out of the way. Measured
+    2026-09-04 over 600 random steps in pair3: two Pillows moved 10 cm, a
+    HousePlant 8 cm, a DeskLamp and a Pen 3 cm.
+
+    Over an evaluation -- 25 episodes of up to 200 steps in each of four houses
+    -- that drift accumulates until something comes to rest on a start pose, and
+    the episode raises. It looked random because which pose breaks depends on
+    the path the policy happens to take, and the C1-C3 gate never saw it because
+    verification teleports without ever stepping.
+
+    The same drift was silently degrading TRAINING, where the agent takes 150k
+    steps in one never-reloaded house.
+
+    A static scene is also the right model for ObjectNav: the task is to
+    navigate to a thing, not to rearrange the room. Applied identically to house
+    A and every variant, so nothing about the A-versus-B comparison changes.
+    """
+    n = 0
+    for obj in _iter_objects(house.get("objects", [])):
+        if obj.get("kinematic") is not True:
+            obj["kinematic"] = True
+            n += 1
+    return n
+
+
 def _strip_asset_ids(house: House) -> House:
     """Drop every ``assetId`` so two houses can be compared modulo appearance."""
     stripped = copy.deepcopy(house)
@@ -897,6 +928,10 @@ def generate(
 
     index: List[Dict[str, Any]] = []
     for pair_num, (house_index, house_a, target) in enumerate(houses):
+        # Before anything is derived from it: every variant is a deep copy of
+        # house A, so freezing here freezes the whole pair.
+        n_frozen = _freeze_scene(house_a)
+        logger.info("pair%d: froze %d objects (static scene)", pair_num, n_frozen)
         pair_id = f"pair{pair_num}"
         out_dir = pair_dir(pair_id)
         out_dir.mkdir(parents=True, exist_ok=True)
