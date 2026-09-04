@@ -41,7 +41,7 @@ POOLS = {
 }
 # The exact L1 house produced by the pre-ladder generator. If this changes,
 # every committed baseline result stops being reproducible from source.
-L1_SHA256 = "8c2b616ea511f978546a967f6c50a7a90d78c5647062830da9deda8efaafdadb"
+L1_SHA256 = "dccba1ceb9c1db2ba83a531e82622514f8467d29e03d14560ee56a0f13ce8ffa"
 
 
 def house_a():
@@ -76,7 +76,21 @@ def by_id(house):
 # L1: the rung every committed result was produced at
 # --------------------------------------------------------------------------
 def test_l1_output_is_byte_stable() -> None:
-    """The single most important test in this file: refactors must not move L1."""
+    """The single most important test in this file: refactors must not move L1.
+
+    L1_SHA256 is a deliberate pin, and every change to it is a change to the
+    BENCHMARK, not to the code. Log each one here with its reason:
+
+      8c2b616e...  original pin, 2026-09-01. Survived the L2/L3 generator
+                   refactor untouched, which is what it exists to prove.
+      dccba1ce...  2026-09-04. Every object in every house was made kinematic
+                   (a static scene). The agent's collider was shoving
+                   physics-enabled objects as it walked -- measured at up to
+                   10 cm over 600 steps -- which drifted objects onto
+                   evaluation start poses and was silently degrading training
+                   as well. L1 is derived from house A, so freezing A moves
+                   this hash. Deliberate; see RESEARCH.md section 4.5.
+    """
     b, _ = build("L1")
     got = hashlib.sha256(json.dumps(b, sort_keys=True).encode()).hexdigest()
     assert got == L1_SHA256, f"L1 output changed! {got} != {L1_SHA256}"

@@ -1,20 +1,14 @@
 {
   "pair": "pair0",
   "n_placed": 4,
-  "n_kept": 3,
+  "n_kept": 4,
   "kept": [
     "BaseballBat|distractor|1",
     "Candle|distractor|2",
-    "DeskLamp|distractor|0"
+    "DeskLamp|distractor|0",
+    "Mug|distractor|3"
   ],
-  "dropped": [
-    {
-      "id": "Mug|distractor|3",
-      "defects_freed": 23,
-      "defects_before": 23,
-      "reason": "blocked floor or a pinned eval start pose"
-    }
-  ],
+  "dropped": [],
   "n_unstable_dropped": 0,
   "settle_tolerance_m": 0.02,
   "n_reachable_reference": 380,
