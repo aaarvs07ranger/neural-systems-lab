@@ -258,23 +258,38 @@ def prune_pair(
                          "-- L2 or the house itself is at fault, not L3",
                          pair_id, len(missing), len(extra), len(blocked))
             break
-        # Remove whichever single distractor frees the most blocked cells.
-        before = len(missing) + len(blocked)
+        if not missing and not blocked:
+            # Only EXTRA cells remain: the variant reaches floor house A does
+            # not. Clutter cannot cause that -- an object blocks cells, it never
+            # opens them -- so removing more of it is pointless, and the loop
+            # would otherwise score every removal as worthless and drop the lot.
+            # That emptied pair0's L3 on 2026-09-04. Stop and say so instead.
+            logger.error("[%s] %d floor cells exist here that house A does not "
+                         "have, with no blocked cells or poses. Clutter cannot "
+                         "cause that -- look at the L2 asset swaps. Keeping the "
+                         "%d distractors; the C1-C3 gate will reject the house.",
+                         pair_id, len(extra), len(keep))
+            break
+
+        # Remove whichever single distractor fixes the most defects. Extra cells
+        # are counted too, so the score always reflects the whole defect set.
+        before = len(missing) + len(extra) + len(blocked)
         best_id, best_freed, best_before = None, -1, before
         for obj_id in sorted(keep):
-            t_missing, _, t_blocked = defects(
+            t_missing, t_extra, t_blocked = defects(
                 (set(candidates) - keep) | {obj_id}
             )
             # Count blocked poses alongside blocked cells: a distractor that
             # frees no floor but unblocks a start pose is exactly the one to go.
-            freed = before - (len(t_missing) + len(t_blocked))
+            freed = before - (len(t_missing) + len(t_extra) + len(t_blocked))
             if freed > best_freed:
                 best_id, best_freed = obj_id, freed
         if best_freed <= 0:
             # No single removal helps: the blockage is joint, so drop them all.
             logger.warning("[%s] no single distractor explains the %d defects "
-                           "-- dropping all %d remaining",
-                           pair_id, before, len(keep))
+                           "(%d cells missing, %d extra, %d poses blocked) "
+                           "-- dropping all %d remaining", pair_id, before,
+                           len(missing), len(extra), len(blocked), len(keep))
             for obj_id in sorted(keep):
                 dropped.append({"id": obj_id, "cells_freed": 0,
                                 "reason": "joint blockage"})
