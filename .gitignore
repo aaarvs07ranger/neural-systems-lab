@@ -38,3 +38,9 @@ results_smoke*/
 # (Comments must be on their own line -- git does NOT strip trailing comments,
 # it treats them as part of the pattern.)
 data/pairs/
+
+# Per-cell plots the grid emits automatically: one PNG per run, ~5 MB across the
+# grid, regenerable from the CSVs beside them, and superseded by the aggregate
+# figure in scripts/plot_ladder.py. The tables themselves ARE tracked -- they are
+# the result.
+results/grid/**/*.png
