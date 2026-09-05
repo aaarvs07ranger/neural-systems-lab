@@ -125,7 +125,24 @@ def load_runs() -> pd.DataFrame:
 
 
 def upsert(df: pd.DataFrame, row: Dict[str, Any]) -> pd.DataFrame:
-    """Insert or replace by experiment_id (idempotent re-ingestion)."""
+    """Insert or replace by experiment_id (idempotent re-ingestion).
+
+    Re-ingesting the SAME experiment is the point. Silently replacing a
+    DIFFERENT one that happens to collide is not: on 2026-09-05 the first grid
+    ingest generated `ppo_pair0_L1_s0` -- byte-identical to the legacy sweep row
+    of the same baseline/pair/rung/seed -- and quietly overwrote 15 committed
+    results before anyone looked. Same cell, different PROTOCOL, different
+    experiment. A cross-cohort collision now raises.
+    """
+    clash = df[(df["experiment_id"] == row["experiment_id"])
+               & (df["cohort"] != row["cohort"])] if not df.empty else df
+    if len(clash):
+        raise ValueError(
+            f"experiment_id {row['experiment_id']!r} already exists in cohort "
+            f"{clash.iloc[0]['cohort']!r} and this row is cohort "
+            f"{row['cohort']!r}. Two different experiments cannot share an id -- "
+            "give one a recipe_tag (e.g. the protocol version)."
+        )
     df = df[df["experiment_id"] != row["experiment_id"]]
     if df.empty:
         return pd.DataFrame([row])
@@ -156,7 +173,13 @@ def make_row(*, summary_csv: Path, baseline: str, seed: int, date: str,
         seed=seed, training_recipe=recipe, train_steps=train_steps,
         eval_seed_base=eval_seed_base, git_commit=git_commit,
         slurm_job=slurm_job, status=status, results_path=results_path,
-        notes=notes, **ctx, **read_metrics(summary_csv),
+        notes=notes, **ctx,
+        # The rung this row measures. Legacy two-row summaries have no `level`
+        # column and read_metrics ignores it; ladder summaries carry four rungs
+        # and this is what selects the right one. PAIR0's default is "L1", which
+        # is also read_metrics' default, so every pre-existing caller is
+        # unchanged.
+        **read_metrics(summary_csv, ctx["shift_level"]),
     )
 
 
@@ -176,6 +199,44 @@ def ingest_sweep(df: pd.DataFrame, sweep_dir: Path, prefix: str,
         )
         df = upsert(df, row)
         print(f"  ingested {row['experiment_id']}")
+    return df
+
+
+def ingest_grid(df: pd.DataFrame, grid_dir: Path, **meta: Any) -> pd.DataFrame:
+    """Ingest the severity-ladder grid: one row per (run, RUNG).
+
+    Layout is `results/grid/<baseline>/<pair>_seed<N>/<baseline>_transfer_summary.csv`,
+    and each summary carries four rungs. A run is one trained agent; a ROW is
+    that agent measured against one rung, because `shift_level` is a column in
+    this schema and a run that produced four measurements is four observations.
+
+    Every rung is scored against the SAME house-A reference from its own run, so
+    the A_* columns repeat across a run's four rows by construction -- that is
+    the pairing, not duplication.
+    """
+    grid_dir = grid_dir.resolve()
+    cells = sorted(grid_dir.glob("*/*_seed*"))
+    if not cells:
+        raise FileNotFoundError(f"no <baseline>/<pair>_seed<N>/ cells under {grid_dir}")
+    n = 0
+    for cell in cells:
+        baseline = cell.parent.name
+        pair, seed = cell.name.split("_seed")
+        summary = cell / f"{baseline}_transfer_summary.csv"
+        if not summary.exists():
+            print(f"  SKIP {cell.name}: no summary (run may have failed)")
+            continue
+        levels = set(pd.read_csv(summary)["level"].astype(str)) - {"A"}
+        for level in sorted(levels):
+            row = make_row(
+                summary_csv=summary, baseline=baseline, seed=int(seed),
+                house_pair=pair, shift_level=level,
+                results_path=str(cell.relative_to(PROJECT_ROOT)),
+                **{k: v for k, v in meta.items() if k != "baseline"},
+            )
+            df = upsert(df, row)
+            n += 1
+    print(f"  ingested {n} (run, rung) rows from {len(cells)} cells")
     return df
 
 
@@ -255,6 +316,17 @@ def cmd_backfill(_: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 # CLI: ingest-sweep / add
 # ---------------------------------------------------------------------------
+def cmd_ingest_grid(a: argparse.Namespace) -> None:
+    df = load_runs()
+    # recipe_tag "v2" keeps grid ids distinct from the protocol-v1 sweep rows
+    # of the same baseline/pair/rung/seed. Same cell, different protocol
+    # (held-out starts, pinned poses, static scene), different experiment.
+    df = ingest_grid(df, Path(a.grid_dir), cohort="grid", date=a.date,
+                     git_commit=a.git_commit, slurm_job=a.slurm_job,
+                     recipe=a.recipe, recipe_tag=a.recipe_tag, notes=a.notes)
+    save_runs(df)
+
+
 def cmd_ingest_sweep(a: argparse.Namespace) -> None:
     df = ingest_sweep(load_runs(), Path(a.sweep_dir), a.prefix,
                       baseline=a.baseline, cohort="sweep", date=a.date,
@@ -388,11 +460,24 @@ def main() -> None:
     a.add_argument("--shift-level", default=PAIR0["shift_level"])
     a.add_argument("--notes", default="")
 
+    g = sub.add_parser("ingest-grid",
+                       help="ingest results/grid: one row per (run, rung)")
+    g.add_argument("grid_dir")
+    g.add_argument("--date", required=True)
+    g.add_argument("--git-commit", required=True)
+    g.add_argument("--slurm-job", default="")
+    g.add_argument("--recipe", default="protocol v2: held-out starts, pinned "
+                                       "eval poses, static scene; 150k env steps")
+    g.add_argument("--recipe-tag", default="v2",
+                   help="distinguishes these ids from earlier protocols")
+    g.add_argument("--notes", default="")
+
     sub.add_parser("render", help="rewrite summary.md from runs.csv")
 
     args = p.parse_args()
     {"backfill": cmd_backfill, "ingest-sweep": cmd_ingest_sweep,
-     "add": cmd_add, "render": cmd_render}[args.cmd](args)
+     "ingest-grid": cmd_ingest_grid, "add": cmd_add,
+     "render": cmd_render}[args.cmd](args)
 
 
 if __name__ == "__main__":
