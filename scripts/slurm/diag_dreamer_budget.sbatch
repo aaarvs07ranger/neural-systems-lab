@@ -8,10 +8,12 @@
 # larger houses, or whether this is seed instability that more steps will not
 # cure.
 #
-# This re-runs exactly those 9 cells at DOUBLE the budget and changes nothing
-# else. If most recover, a full parity re-run of all four baselines at 300k is
-# justified (~3 days). If they do not, more compute is wasted and the grid is
-# reported as it stands with the pre-committed robustness pass.
+# This re-runs FIVE of those cells at DOUBLE the budget and changes nothing else.
+# At ~14k steps/hour measured, 300k steps is ~20 h per cell; all five run
+# concurrently, so ~20 h total. If 4 of 5 recover, a full parity re-run of all
+# four baselines at 300k is justified (~3 days). If they do not, more compute is
+# wasted and the grid is reported as it stands with the pre-committed robustness
+# pass, disclosing DreamerV3 as the least reliable of the four in-domain.
 #
 # Results land in a SEPARATE tree so they can never be mistaken for grid cells:
 #   $RUN_ROOT/diag300k/dreamerv3/<pair>_seed<N>
@@ -23,29 +25,37 @@
 #SBATCH --job-name=nsl-diag300k
 #SBATCH --account=rao
 #SBATCH --partition=ckpt
-#SBATCH --array=0-8
+#SBATCH --array=0-4
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gpus=1
-#SBATCH --time=24:00:00
+#SBATCH --time=30:00:00
 #SBATCH --requeue
 #SBATCH --output=/gscratch/scrubbed/%u/nsl-runs/slurm-%x-%A_%a.out
 
 set -euo pipefail
 
-# The nine cells with house-A success < 0.5, as "<pair> <seed>".
+# FIVE of the nine weak cells, one from each affected house plus the two
+# extremes, so the sample spans the range rather than clustering in one house:
+#
+#   pair4 3  house-A 0.00  the worst case -- if anything recovers, this should
+#   pair2 0  house-A 0.20  small house, so not explainable by house size
+#   pair3 1  house-A 0.20  largest affected house
+#   pair1 0  house-A 0.36  mid
+#   pair2 3  house-A 0.48  just under the threshold -- the easiest to recover
+#
+# Five rather than nine because the run before this died on "Disk quota
+# exceeded" with nine concurrent replay buffers, on a /gscratch that is 98% full
+# group-wide and outside our control. Five halves the peak footprint at the same
+# wall clock, since all five run concurrently.
 CELLS=(
-  "pair1 0"   # A 0.36
-  "pair1 1"   # A 0.36
-  "pair2 0"   # A 0.20
-  "pair2 3"   # A 0.48
-  "pair3 0"   # A 0.44
-  "pair3 1"   # A 0.20
-  "pair3 2"   # A 0.36
-  "pair4 2"   # A 0.32
   "pair4 3"   # A 0.00
+  "pair2 0"   # A 0.20
+  "pair3 1"   # A 0.20
+  "pair1 0"   # A 0.36
+  "pair2 3"   # A 0.48
 )
 read -r PAIR SEED <<< "${CELLS[$SLURM_ARRAY_TASK_ID]}"
 STEPS=300000
@@ -65,6 +75,17 @@ export NSL_RESULTS_DIR="${RUN_ROOT}/diag300k/dreamerv3/${PAIR}_seed${SEED}"
 mkdir -p "${NSL_RESULTS_DIR}"
 
 cd "${SLURM_SUBMIT_DIR}"
+
+# The previous attempt died 4 h in with "Disk quota exceeded" while writing
+# replay episodes: /gscratch is 98% full group-wide. Surface that up front
+# rather than discovering it after a night of compute.
+FREE_GB=$(df -BG --output=avail /gscratch/scrubbed 2>/dev/null | tail -1 | tr -dc "0-9")
+echo "[slurm] /gscratch/scrubbed free: ${FREE_GB:-?} GiB (this cell needs ~12 GiB of replay)"
+if [ -n "${FREE_GB}" ] && [ "${FREE_GB}" -lt 200 ]; then
+    echo "[slurm] ABORT: under 200 GiB free; five concurrent replay buffers will not fit."
+    exit 1
+fi
+
 echo "[slurm] DIAGNOSTIC ${PAIR} seed ${SEED} at ${STEPS} steps (grid used 150000)"
 
 python main.py --baseline dreamerv3 --pair "${PAIR}" --seed "${SEED}" \
