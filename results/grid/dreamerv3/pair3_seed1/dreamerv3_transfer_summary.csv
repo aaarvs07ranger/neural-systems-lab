@@ -1,0 +1,5 @@
+level,variant,success_rate,spl,mean_episode_length,mean_total_reward,episodes,success_drop_abs,success_drop_rel,spl_drop_abs,spl_drop_rel
+A,A (train visuals),0.2,0.15286033610589553,168.96,2.93480003570935,25,0.0,0.0,0.0,0.0
+L1,B_L1 (materials + lighting),0.08,0.05473684184624277,189.2,-1.4087266682167847,25,0.12000000000000001,0.6,0.09812349425965275,0.6419159918088674
+L2,B_L2 (+ object appearance),0.0,0.0,200.0,-1.7496410740219235,25,0.2,1.0,0.15286033610589553,1.0
+L3,B_L3 (+ distractors),0.0,0.0,200.0,-1.6464941815726741,25,0.2,1.0,0.15286033610589553,1.0
