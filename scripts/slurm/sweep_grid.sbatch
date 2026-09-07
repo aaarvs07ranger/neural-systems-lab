@@ -1,8 +1,9 @@
 #!/bin/bash
 # The Phase-1 grid: one array task per (house pair x training seed).
 #
-#   sbatch scripts/slurm/sweep_grid.sbatch ppo
-#   sbatch --array=0-24%4 scripts/slurm/sweep_grid.sbatch dreamerv3   # tighter cap
+#   sbatch scripts/slurm/sweep_grid.sbatch ppo                 # 150k (default)
+#   sbatch scripts/slurm/sweep_grid.sbatch dreamerv3 300000     # 300k budget
+#   sbatch --array=0-24%4 scripts/slurm/sweep_grid.sbatch tdmpc2 300000
 #
 # 25 tasks = 5 pairs x 5 seeds. Run this once per baseline and the grid is
 # 4 x 25 = 100 training runs.
@@ -31,6 +32,11 @@
 set -euo pipefail
 BASELINE="${1:-ppo}"
 N_SEEDS="${NSL_N_SEEDS:-5}"
+# Training budget, in env steps. The FAIRNESS CURRENCY: every baseline in a grid
+# must use the same value, or no cross-baseline claim survives review. Passed as
+# an argument rather than edited in place so a mixed-budget grid cannot happen by
+# forgetting to change it back.
+STEPS="${2:-150000}"
 TASK="${SLURM_ARRAY_TASK_ID}"
 PAIR_IDX=$(( TASK / N_SEEDS ))
 SEED=$(( TASK % N_SEEDS ))
@@ -56,7 +62,10 @@ export NSL_POSE_HOLDOUT=1
 # ~21 days, which is why tables are copied into the repo below as each cell
 # lands rather than in one sweep at the end.
 RUN_ROOT="${NSL_RUN_ROOT:-/gscratch/scrubbed/${USER}/nsl-runs}"
-export NSL_RESULTS_DIR="${RUN_ROOT}/grid/${BASELINE}/${CELL}"
+# Runs are kept apart by budget: a 300k cell must never land where a 150k cell
+# of the same name lives, or the two become indistinguishable on disk.
+GRID_TAG="grid$([ "${STEPS}" = "150000" ] && echo "" || echo "_${STEPS}")"
+export NSL_RESULTS_DIR="${RUN_ROOT}/${GRID_TAG}/${BASELINE}/${CELL}"
 mkdir -p "${NSL_RESULTS_DIR}"
 
 RAO_FREE_KB=$(df -Pk "/gscratch/rao/${USER}" | awk 'NR==2 {print $4}')
@@ -68,7 +77,8 @@ fi
 
 cd "${SLURM_SUBMIT_DIR}"
 echo "[slurm] ${SLURM_ARRAY_JOB_ID}_${TASK} on $(hostname):" \
-     "baseline=${BASELINE} pair=${PAIR} seed=${SEED} results=${NSL_RESULTS_DIR}"
+     "baseline=${BASELINE} pair=${PAIR} seed=${SEED} steps=${STEPS}" \
+     "results=${NSL_RESULTS_DIR}"
 
 # Train and eval are named explicitly rather than using --stage all, which also
 # runs generation. Ten concurrent tasks regenerating the shared data/ tree would
@@ -76,16 +86,16 @@ echo "[slurm] ${SLURM_ARRAY_JOB_ID}_${TASK} on $(hostname):" \
 # a one-off cluster-wide step (regen_and_verify.sbatch), never a per-run one.
 # shellcheck disable=SC2086
 python main.py --baseline "${BASELINE}" --pair "${PAIR}" --seed "${SEED}" \
-    --stage train ${NSL_EXTRA_ARGS:-}
+    --stage train --total-steps "${STEPS}" ${NSL_EXTRA_ARGS:-}
 # shellcheck disable=SC2086
 python main.py --baseline "${BASELINE}" --pair "${PAIR}" --seed "${SEED}" \
-    --stage eval ${NSL_EXTRA_ARGS:-}
+    --stage eval --total-steps "${STEPS}" ${NSL_EXTRA_ARGS:-}
 
 # --- land the results, then shrink the footprint --------------------------
 # Tables and plots are kilobytes and are the actual deliverable, so they are
 # copied into the repo immediately: scrubbed purges after ~21 days and a grid
 # this size will straddle that window.
-DEST="${SLURM_SUBMIT_DIR}/results/grid/${BASELINE}/${CELL}"
+DEST="${SLURM_SUBMIT_DIR}/results/${GRID_TAG}/${BASELINE}/${CELL}"
 mkdir -p "${DEST}"
 cp -f "${NSL_RESULTS_DIR}/tables/"* "${DEST}/" 2>/dev/null || true
 cp -f "${NSL_RESULTS_DIR}/plots/"*  "${DEST}/" 2>/dev/null || true
