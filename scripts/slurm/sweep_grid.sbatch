@@ -76,6 +76,20 @@ if [ "${RAO_FREE_KB}" -lt 5242880 ]; then
 fi
 
 cd "${SLURM_SUBMIT_DIR}"
+
+# /gscratch is a SHARED filesystem and has twice hit 100% group-wide while this
+# grid ran, killing 12 DreamerV3 cells with "Disk quota exceeded" hours into
+# training. Our own usage is ~66 G of 130 T, so this is not something we cause
+# or can fix -- but we can refuse to start rather than discover it at hour four.
+# A DreamerV3 cell writes ~2-4 GiB of replay; the floor is set well above that.
+FREE_GB=$(df -BG --output=avail /gscratch/scrubbed 2>/dev/null | tail -1 | tr -dc "0-9")
+echo "[slurm] /gscratch/scrubbed free: ${FREE_GB:-?} GiB"
+if [ -n "${FREE_GB}" ] && [ "${FREE_GB}" -lt 100 ]; then
+    echo "[slurm] ABORT: under 100 GiB free on a shared filesystem; not starting" \
+         "a multi-hour run that will die writing replay."
+    exit 1
+fi
+
 echo "[slurm] ${SLURM_ARRAY_JOB_ID}_${TASK} on $(hostname):" \
      "baseline=${BASELINE} pair=${PAIR} seed=${SEED} steps=${STEPS}" \
      "results=${NSL_RESULTS_DIR}"
