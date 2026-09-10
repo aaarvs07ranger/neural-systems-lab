@@ -121,10 +121,25 @@ echo "[slurm] tables copied to ${DEST}"
 # since a rerun regenerates them from the seed. The final model is KEPT: rollout
 # figures need it, and re-training to recover one costs hours.
 if [ -d "${DEST}" ] && [ -n "$(ls -A "${DEST}" 2>/dev/null)" ]; then
-    rm -rf "${NSL_RESULTS_DIR}/logs/tdmpc2" "${NSL_RESULTS_DIR}/logs/dreamerv3"
+    # Cleanup is HOUSEKEEPING, not science, and must never fail the job. On
+    # 2026-09-10 three cells finished training, evaluation and the table copy,
+    # then exited non-zero because `rm -rf` on a GPFS replay directory returned
+    # "Directory not empty" (the filesystem was still flushing writes). errexit
+    # turned a disk-tidying hiccup into three FAILED cells whose results were
+    # sitting on disk, complete and correct, the whole time. Retry briefly, then
+    # give up and leave the bytes rather than lose the run.
+    for attempt in 1 2 3; do
+        rm -rf "${NSL_RESULTS_DIR}/logs/tdmpc2" "${NSL_RESULTS_DIR}/logs/dreamerv3" 2>/dev/null && break
+        sleep 5
+    done
     find "${NSL_RESULTS_DIR}/checkpoints" -name '*_steps.zip' -delete 2>/dev/null || true
     find "${NSL_RESULTS_DIR}/checkpoints" -name 'latest.pt' -delete 2>/dev/null || true
-    echo "[slurm] cleaned replay buffers and intermediate checkpoints for ${CELL}"
+    if [ -d "${NSL_RESULTS_DIR}/logs/dreamerv3" ] || [ -d "${NSL_RESULTS_DIR}/logs/tdmpc2" ]; then
+        echo "[slurm] WARNING: replay for ${CELL} could not be removed; leaving it." \
+             "The run itself SUCCEEDED -- do not treat this as a failed cell."
+    else
+        echo "[slurm] cleaned replay buffers and intermediate checkpoints for ${CELL}"
+    fi
 else
     echo "[slurm] WARNING: no tables landed in ${DEST} — keeping everything" \
          "so the run can be diagnosed."
