@@ -27,7 +27,7 @@ import pandas as pd
 
 from config import GenerationConfig, TABLES_DIR, pair_dir
 
-RUNGS = ["L1", "L2", "L3"]
+RUNGS = ["L1", "L2noT", "L2", "L3"]
 ORDER = ["ppo", "ppo_aug", "dreamerv3", "tdmpc2"]
 NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "dreamerv3": "DreamerV3",
         "tdmpc2": "TD-MPC2"}

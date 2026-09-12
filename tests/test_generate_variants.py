@@ -306,6 +306,54 @@ def test_l3_distractors_are_kinematic() -> None:
             )
 
 
+def test_l2noT_differs_from_l2_only_in_the_target() -> None:
+    """The control's whole value is that ONE thing differs.
+
+    L2noT exists so the target's own appearance can be compared against the
+    surrounding context WITHIN a house. If it differed from L2 in anything else,
+    the comparison would be confounded and the control would be worthless -- so
+    this asserts the difference is exactly the target's assets and nothing more.
+    """
+    from envs.generate_variants import _object_type
+
+    for seed in (SEED, 11, 404):
+        l2, _ = build("L2", seed=seed)
+        nt, rep = build("L2noT", seed=seed)
+        base = {o["id"]: o.get("assetId") for o in _iter_objects(house_a()["objects"])
+                if o.get("assetId")}
+
+        def changed(v):
+            return {o["id"] for o in _iter_objects(v["objects"])
+                    if o.get("assetId") and base.get(o["id"]) != o["assetId"]}
+
+        target_ids = {o["id"] for o in _iter_objects(house_a()["objects"])
+                      if _object_type(o) == TARGET}
+        c2, cn = changed(l2), changed(nt)
+        assert not (cn & target_ids), f"seed {seed}: L2noT changed the target"
+        assert (c2 - cn) == (c2 & target_ids), (
+            f"seed {seed}: L2 and L2noT differ in something other than the target"
+        )
+        assert cn == (c2 - target_ids), (
+            f"seed {seed}: L2noT is not L2-minus-the-target"
+        )
+        assert rep.get("l2_target_deliberately_unswapped"), (
+            "the control must record which object it preserved"
+        )
+
+
+def test_l2noT_requires_a_target() -> None:
+    """Without a target there is nothing to preserve, so it is not a control."""
+    from envs.generate_variants import build_variant
+
+    try:
+        build_variant(house_a(), POOLS, SEED, level="L2noT",
+                      asset_pool=asset_pool(house_a()), target_object_type=None)
+    except ValueError as exc:
+        assert "L2noT" in str(exc)
+    else:
+        raise AssertionError("L2noT without a target must not silently produce L2")
+
+
 if __name__ == "__main__":
     fns = [(n, f) for n, f in sorted(globals().items())
            if n.startswith("test_") and callable(f)]

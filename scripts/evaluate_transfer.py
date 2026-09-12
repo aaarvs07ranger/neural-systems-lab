@@ -251,6 +251,7 @@ def load_frozen_model(baseline: str, cfg: Any) -> Any:
 LEVEL_LABELS = {
     "A": "A (train visuals)",
     "L1": "B_L1 (materials + lighting)",
+    "L2noT": "B_L2noT (+ object appearance, TARGET UNCHANGED)",
     "L2": "B_L2 (+ object appearance)",
     "L3": "B_L3 (+ distractors)",
 }

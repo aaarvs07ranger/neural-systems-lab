@@ -46,7 +46,10 @@ def pair_house_path(pair_id: str, level: str) -> Path:
 TASK_CONFIG_PATH: Path = DATA_DIR / "task_config.json"  # target object, seeds, provenance
 
 # Severity rungs a transfer evaluation walks, in increasing order.
-EVAL_LEVELS: Tuple[str, ...] = ("L1", "L2", "L3")
+# L2noT is a CONTROL, not a severity rung: L2 with the target's appearance left
+# alone. Evaluated alongside the ladder so one run measures both. Ordered by
+# severity for the figure, which puts it between L1 and L2.
+EVAL_LEVELS: Tuple[str, ...] = ("L1", "L2noT", "L2", "L3")
 
 # --- Protocol v2: held-out evaluation start poses ---------------------------
 # Training seeds the pose RNG once and then streams unseeded, so with ~4,500
@@ -167,7 +170,7 @@ class GenerationConfig:
     # L2 += object-appearance swaps, L3 += distractor objects.
     # (L4, layout perturbation, is out of scope: it changes geometry and so
     # invalidates paired starts and SPL comparability.)
-    levels: Tuple[str, ...] = ("L1", "L2", "L3")
+    levels: Tuple[str, ...] = ("L1", "L2", "L2noT", "L3")
     n_distractors: int = 8         # objects added at L3, on receptacle surfaces
     # House pairs to generate. pair0 is pinned to the originally selected house
     # so the committed baseline stays reproducible; the rest are chosen to span

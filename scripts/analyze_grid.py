@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import pandas as pd
 
-RUNGS = ["L1", "L2", "L3"]
+RUNGS = ["L1", "L2noT", "L2", "L3"]
 ORDER = ["ppo", "ppo_aug", "dreamerv3", "tdmpc2"]
 NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "dreamerv3": "DreamerV3",
         "tdmpc2": "TD-MPC2"}

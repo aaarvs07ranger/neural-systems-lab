@@ -31,8 +31,9 @@ import pandas as pd
 
 from config import GenerationConfig, pair_dir
 
-RUNGS = ["A", "L1", "L2", "L3"]
+RUNGS = ["A", "L1", "L2noT", "L2", "L3"]
 RUNG_LABEL = {"A": "A\ntrain", "L1": "L1\n+materials\n+lighting",
+              "L2noT": "L2noT\n+objects,\ntarget kept",
               "L2": "L2\n+object\nappearance", "L3": "L3\n+clutter"}
 
 # Documented categorical palette, slots 1 (blue) and 3 (aqua). Validated

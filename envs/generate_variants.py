@@ -73,7 +73,13 @@ House = Dict[str, Any]
 
 # Severity rungs, in cumulative order. L4 (layout perturbation) is deliberately
 # absent: it changes geometry, so paired starts and SPL stop being comparable.
-LEVELS: Tuple[str, ...] = ("L1", "L2", "L3")
+# L2noT is a CONTROL, not a rung on the severity ladder: it is L2 with the
+# target's appearance deliberately left alone. Compared against L2 in the SAME
+# house it isolates the target's own appearance from the surrounding context --
+# the two are confounded in any between-house comparison, since a house that
+# happens to have an unswappable target also differs in size, layout and
+# contents. Ordered by severity, it sits between L1 and L2.
+LEVELS: Tuple[str, ...] = ("L1", "L2", "L2noT", "L3")
 
 # Marker embedded in the `id` of every object L3 adds, so the structural check
 # and any later analysis can identify (and strip) distractors unambiguously.
@@ -426,9 +432,17 @@ def _apply_l2(
     rng: random.Random,
     report: Dict[str, Any],
     safe_assets: Optional[Dict[str, List[str]]] = None,
+    skip_target: Optional[str] = None,
 ) -> None:
     """Rung L2, in place: swap every object's asset for a different one of the
     SAME objectType.
+
+    ``skip_target`` names an objectType to leave alone, producing the L2noT
+    control: everything in the room changes appearance EXCEPT the target. Run
+    against plain L2 in the same house, it isolates the effect of the TARGET's
+    own appearance from the effect of the surrounding context -- the two are
+    confounded in every between-house comparison, because a house that happens
+    to have an unswappable target also differs in size, layout and contents.
 
     ``id``, ``position``, ``rotation`` and the children list are untouched, so
     the task graph, the target lookup and the paired-start machinery are all
@@ -437,10 +451,15 @@ def _apply_l2(
     """
     swaps: List[Dict[str, Any]] = []
     unswappable: List[Dict[str, Any]] = []
+    skipped_target: List[Dict[str, Any]] = []
     for obj in _iter_objects(house_b.get("objects", [])):
         obj_type = _object_type(obj)
         current = obj.get("assetId")
         if not obj_type or not isinstance(current, str) or not current:
+            continue
+        if skip_target is not None and obj_type == skip_target:
+            skipped_target.append({"id": obj.get("id"), "type": obj_type,
+                                   "asset": current})
             continue
         alternatives = [a for a in asset_pool.get(obj_type, []) if a != current]
         reason = "no alternative asset in pool"
@@ -462,8 +481,12 @@ def _apply_l2(
                       "before": current, "after": replacement})
     report["l2_asset_swaps"] = swaps
     report["l2_unswappable"] = unswappable
-    logger.info("L2: swapped %d object assets, %d had no alternative",
-                len(swaps), len(unswappable))
+    if skip_target is not None:
+        report["l2_target_deliberately_unswapped"] = skipped_target
+    logger.info("L2%s: swapped %d object assets, %d had no alternative%s",
+                "noT" if skip_target else "", len(swaps), len(unswappable),
+                f", {len(skipped_target)} target instance(s) left alone"
+                if skip_target else "")
 
 
 def _apply_l3(
@@ -635,18 +658,22 @@ def build_variant(
     """
     if level not in LEVELS:
         raise ValueError(f"level={level!r} not in {LEVELS}")
-    if level in ("L2", "L3") and not asset_pool:
+    if level in ("L2", "L2noT", "L3") and not asset_pool:
         raise ValueError(f"level {level} requires asset_pool (see harvest_asset_pool)")
     if level == "L3" and not target_object_type:
         raise ValueError("level L3 requires target_object_type to protect it")
+    if level == "L2noT" and not target_object_type:
+        raise ValueError("level L2noT requires target_object_type -- it is the "
+                         "object whose appearance is deliberately preserved")
 
     rng = random.Random(seed)
     house_b = copy.deepcopy(house_a)
     report: Dict[str, Any] = {"level": level}
 
     _apply_l1(house_b, pools, rng, report)
-    if level in ("L2", "L3"):
-        _apply_l2(house_b, asset_pool or {}, rng, report, safe_assets=safe_assets)
+    if level in ("L2", "L2noT", "L3"):
+        _apply_l2(house_b, asset_pool or {}, rng, report, safe_assets=safe_assets,
+                  skip_target=str(target_object_type) if level == "L2noT" else None)
     if level == "L3":
         _apply_l3(house_b, asset_pool or {}, rng,
                   str(target_object_type), n_distractors, report,
@@ -751,6 +778,8 @@ def assert_structurally_identical(
     * **L2** -- as L1, but ``assetId`` is also stripped before comparing,
       because swapping assets is the point. Everything else about every object
       (``id``, ``position``, ``rotation``, nesting) must still match exactly.
+    * **L2noT** -- same rule as L2. It swaps strictly fewer assets (the target
+      keeps its own), so anything L2 permits, L2noT permits.
     * **L3** -- as L2, after removing the tagged distractors from B. The
       original scene must survive untouched underneath the added clutter.
 
@@ -766,7 +795,9 @@ def assert_structurally_identical(
     left, right = house_a, house_b
     if level == "L3":
         right = _strip_distractors(right)
-    if level in ("L2", "L3"):
+    if level in ("L2", "L2noT", "L3"):
+        # L2noT changes strictly FEWER assets than L2 (the target keeps its
+        # own), so it is compared under the same rule.
         left, right = _strip_asset_ids(left), _strip_asset_ids(right)
     if _strip_visuals(left) != _strip_visuals(right):
         raise AssertionError(
