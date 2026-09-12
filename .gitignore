@@ -43,4 +43,7 @@ data/pairs/
 # grid, regenerable from the CSVs beside them, and superseded by the aggregate
 # figure in scripts/plot_ladder.py. The tables themselves ARE tracked -- they are
 # the result.
-results/grid/**/*.png
+# grid* covers every budget tree (grid/, grid_300000/, ...). The earlier rule
+# said results/grid/**/*.png and silently missed grid_300000/, which committed
+# 79 regenerable plots (6.5 MB) before anyone noticed.
+results/grid*/**/*.png
