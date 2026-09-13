@@ -47,3 +47,4 @@ data/pairs/
 # said results/grid/**/*.png and silently missed grid_300000/, which committed
 # 79 regenerable plots (6.5 MB) before anyone noticed.
 results/grid*/**/*.png
+results/evalonly_*/**/*.png
