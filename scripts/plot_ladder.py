@@ -14,7 +14,15 @@ paper's actual axis -- model-free (blue) vs world model (aqua) -- and dash
 separates the two members within each group. Identity is therefore never
 colour-alone: hue + dash + a direct label.
 
-    python scripts/plot_ladder.py [--metric success|spl] [--mode light|dark]
+Which runs: by default, runs whose house-A success is at least 0.5 -- the same
+set every comparison between agents uses (rule fixed 2026-09-05). `--all-agents`
+draws every run instead; both versions are generated for the paper. The L2noT
+control is a separate figure (`plot_target_effect.py`), because for 7 retrained
+agents its numbers come from a different agent than these lines.
+
+    python scripts/plot_ladder.py                     # 300k (headline)
+    python scripts/plot_ladder.py --grid grid         # 150k (appendix)
+    python scripts/plot_ladder.py --all-agents
 """
 from __future__ import annotations
 
@@ -31,9 +39,9 @@ import pandas as pd
 
 from config import GenerationConfig, pair_dir
 
-RUNGS = ["A", "L1", "L2noT", "L2", "L3"]
+RUNGS = ["A", "L1", "L2", "L3"]
+MIN_A = 0.5
 RUNG_LABEL = {"A": "A\ntrain", "L1": "L1\n+materials\n+lighting",
-              "L2noT": "L2noT\n+objects,\ntarget kept",
               "L2": "L2\n+object\nappearance", "L3": "L3\n+clutter"}
 
 # Documented categorical palette, slots 1 (blue) and 3 (aqua). Validated
@@ -52,16 +60,20 @@ INK = {"light": ("#fcfcfb", "#0b0b0b", "#52514e", "#e1e0d9", "#c3c2b7"),
        "dark":  ("#1a1a19", "#ffffff", "#c3c2b7", "#3a3a38", "#52514e")}
 
 
-def load() -> pd.DataFrame:
+def budget_tag(grid: str) -> str:
+    return "150k" if grid == "grid" else f"{int(grid.split('_')[1]) // 1000}k"
+
+
+def load(grid: str, all_agents: bool) -> pd.DataFrame:
     rows = []
-    for f in sorted(glob.glob("results/grid/*/*/*_transfer_summary.csv")):
+    for f in sorted(glob.glob(f"results/{grid}/*/*/*_transfer_summary.csv")):
         p = Path(f)
         baseline = p.parents[1].name
         pair, seed = p.parent.name.split("_seed")
         df = pd.read_csv(f).set_index("level")
+        if not all_agents and df.loc["A", "success_rate"] < MIN_A:
+            continue
         for rung in RUNGS:
-            if rung not in df.index:
-                continue
             rows.append(dict(baseline=baseline, pair=pair, seed=int(seed), rung=rung,
                              success=df.loc[rung, "success_rate"],
                              spl=df.loc[rung, "spl"]))
@@ -85,16 +97,19 @@ def pair_meta() -> dict:
     return meta
 
 
-def plot(metric: str = "success", mode: str = "light") -> Path:
+def plot(metric: str = "success", mode: str = "light", grid_name: str = "grid_300000",
+         all_agents: bool = False) -> Path:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
     surface, ink, muted, grid, baseline_c = INK[mode]
-    d = load()
+    d = load(grid_name, all_agents)
     if d.empty:
-        raise SystemExit("no grid results under results/grid/ yet")
+        raise SystemExit(f"no grid results under results/{grid_name}/ yet")
+    tag = budget_tag(grid_name)
+    counts = d[d.rung == "A"].groupby("baseline").size()
     meta = pair_meta()
     # Panels ordered by house size: the L1 damage tracks it loosely, and the
     # one non-swappable pair then stands out on its own merits rather than
@@ -123,8 +138,10 @@ def plot(metric: str = "success", mode: str = "light") -> Path:
             ok = g["mean"].notna()
             # +/-1 std over seeds, as a band rather than caps: four overlapping
             # series make error bars a thicket.
-            ax.fill_between(x[ok], (g["mean"] - g["std"].fillna(0))[ok],
-                            (g["mean"] + g["std"].fillna(0))[ok],
+            # Clipped to [0, 1]: a rate cannot leave that range, and a band that
+            # does would suggest otherwise.
+            ax.fill_between(x[ok], (g["mean"] - g["std"].fillna(0)).clip(0, 1)[ok],
+                            (g["mean"] + g["std"].fillna(0)).clip(0, 1)[ok],
                             color=colour, alpha=0.13, linewidth=0, zorder=2)
             ax.plot(x[ok], g["mean"][ok], color=colour, linewidth=2.0,
                     dashes=dash if dash else (None, None), marker="o",
@@ -182,13 +199,18 @@ def plot(metric: str = "success", mode: str = "light") -> Path:
     fig.legend(handles=handles, frameon=False, fontsize=8.5, labelcolor=ink,
                loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.035))
 
-    fig.suptitle("Zero-shot transfer across the severity ladder"
-                 f"   ({'success rate' if metric=='success' else 'SPL'}, mean ±1 s.d. over 5 seeds)",
-                 color=ink, fontsize=11, x=0.008, ha="left", y=1.0)
+    which = ("every run" if all_agents else
+             f"runs with house-A success ≥ {MIN_A}: " +
+             ", ".join(f"{SERIES[b][3]} {int(counts.get(b, 0))}/25" for b in SERIES))
+    fig.suptitle(f"Zero-shot transfer across the severity ladder ({tag} training steps)\n"
+                 f"{'Success rate' if metric=='success' else 'SPL'}, mean ±1 s.d. over training seeds; {which}",
+                 color=ink, fontsize=10, x=0.008, ha="left", va="top", y=0.99, linespacing=1.5)
     # Right margin reserved for the direct labels, which sit outside the axes.
     fig.tight_layout(rect=(0, 0.06, 0.9, 0.97))
+    fig.subplots_adjust(top=0.76)          # room for the two-line figure title
 
-    out = Path("results/plots") / f"ladder_{metric}_{mode}.png"
+    suffix = "_allagents" if all_agents else ""
+    out = Path("results/plots") / f"ladder_{tag}_{metric}{suffix}_{mode}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220, facecolor=surface, bbox_inches="tight")
     plt.close(fig)
@@ -204,12 +226,14 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--metric", choices=("success", "spl"), default="success")
     ap.add_argument("--mode", choices=("light", "dark", "both"), default="both")
+    ap.add_argument("--grid", default="grid_300000")
+    ap.add_argument("--all-agents", action="store_true")
     a = ap.parse_args()
     modes = ("light", "dark") if a.mode == "both" else (a.mode,)
     metrics = ("success", "spl") if a.metric == "success" else (a.metric,)
     for m in modes:
         for k in metrics:
-            print(f"  wrote {plot(k, m)}")
+            print(f"  wrote {plot(k, m, a.grid, a.all_agents)}")
 
 
 if __name__ == "__main__":

@@ -1,43 +1,61 @@
 """Paper tables from the grid, generated -- never transcribed.
 
 Every number in the paper comes from here, so a table can be regenerated from
-the committed CSVs and can never drift from them. Two outputs:
+the committed CSVs and can never drift from them. For each budget:
 
-  results/tables/grid_main.md       the main-body table: baseline x rung,
-                                    pooled over houses, both metrics
-  results/tables/grid_by_pair.md    the appendix table: every cell, with the
-                                    per-house detail the main body cannot hold
+  results/tables/grid_main_<budget>.md     main-body tables, pooled over houses
+  results/tables/grid_by_pair_<budget>.md  appendix: every house, every agent type
 
-Pooling is reported WITH the spread across houses, never instead of it. PPO's
-L1 drop ranges 8% to 92% across the five houses, so a pooled mean alone would
-describe no house in the study.
+Rules the tables follow:
+  * Pooled means are always printed WITH their range across houses. PPO's L1
+    damage runs from 6% to 95% across the five houses, so a pooled mean alone
+    would describe no house.
+  * In-domain success (house A) sits beside every transfer number.
+  * Success rates use every agent. The share of house-A success LOST is a ratio,
+    so runs with house-A success < 0.5 are left out of it (rule fixed
+    2026-09-05); the number of runs counted is printed.
+  * A, L1, L2, L3 come from the committed grid (the original agents). The L2noT
+    control is reported separately, from `scripts/test_target_effect.py`, where
+    each agent is compared with itself in one evaluation.
 
-    python scripts/make_tables.py
+    python scripts/make_tables.py                 # 300k (headline)
+    python scripts/make_tables.py --grid grid     # 150k (appendix)
 """
 from __future__ import annotations
 
+import argparse
 import glob
 import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 
 from config import GenerationConfig, TABLES_DIR, pair_dir
 
-RUNGS = ["L1", "L2noT", "L2", "L3"]
+RUNGS = ["A", "L1", "L2", "L3"]
+SHIFTED = ["L1", "L2", "L3"]
 ORDER = ["ppo", "ppo_aug", "dreamerv3", "tdmpc2"]
 NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "dreamerv3": "DreamerV3",
         "tdmpc2": "TD-MPC2"}
-CLASS = {"ppo": "model-free", "ppo_aug": "model-free + DR",
-         "dreamerv3": "reconstruction WM", "tdmpc2": "decoder-free WM"}
+CLASS = {"ppo": "model-free", "ppo_aug": "model-free + augmentation",
+         "dreamerv3": "world model (predicts pixels)", "tdmpc2": "world model (predicts reward/value)"}
+MIN_A = 0.5
+RUNG_NAME = {"A": "A (training house)", "L1": "L1 walls/floor/light",
+             "L2": "L2 + objects & target", "L3": "L3 + clutter"}
 
 
-def load() -> pd.DataFrame:
+def budget_tag(grid: str) -> str:
+    return "150k" if grid == "grid" else f"{int(grid.split('_')[1]) // 1000}k"
+
+
+def load(grid: str) -> pd.DataFrame:
+    """One row per (agent run, rung) from the committed grid tree."""
     rows = []
-    for f in sorted(glob.glob("results/grid/*/*/*_transfer_summary.csv")):
+    for f in sorted(glob.glob(str(ROOT / "results" / grid / "*" / "*" / "*_transfer_summary.csv"))):
         p = Path(f)
         baseline = p.parents[1].name
         pair, seed = p.parent.name.split("_seed")
@@ -45,7 +63,7 @@ def load() -> pd.DataFrame:
         A, AS = df.loc["A", "success_rate"], df.loc["A", "spl"]
         for rung in RUNGS:
             if rung not in df.index:
-                continue
+                raise ValueError(f"{f} has no {rung} row")
             rows.append(dict(
                 baseline=baseline, pair=pair, seed=int(seed), rung=rung,
                 A_success=A, A_spl=AS,
@@ -60,87 +78,140 @@ def pair_meta() -> dict:
     out = {}
     for i in range(GenerationConfig().n_pairs):
         pid = f"pair{i}"
-        try:
-            v = json.loads((pair_dir(pid) / "verification.json").read_text())
-            s = json.loads((pair_dir(pid) / "safe_assets.json").read_text())
-            t = json.loads((pair_dir(pid) / "task_config.json").read_text())
-            l3 = json.loads((pair_dir(pid) / "l3_prune.json").read_text())
-            out[pid] = dict(cells=v["reference"]["n_reachable"],
-                            target=t["target_object_type"],
-                            swappable=bool(s.get("target_swappable")),
-                            clutter=l3.get("n_kept"))
-        except FileNotFoundError:
-            pass
+        v = json.loads((pair_dir(pid) / "verification.json").read_text())
+        s = json.loads((pair_dir(pid) / "safe_assets.json").read_text())
+        t = json.loads((pair_dir(pid) / "task_config.json").read_text())
+        l3 = json.loads((pair_dir(pid) / "l3_prune.json").read_text())
+        out[pid] = dict(cells=v["reference"]["n_reachable"],
+                        target=t["target_object_type"],
+                        swappable=bool(s.get("target_swappable")),
+                        clutter=l3.get("n_kept"))
     return out
 
 
-def main_table(d: pd.DataFrame, meta: dict) -> str:
-    lines = ["# Grid — main table", "",
-             "Relative drop vs each agent's own house A, pooled over "
-             f"{d.pair.nunique()} house pairs x {d.seed.nunique()} seeds. "
-             "`range` is across HOUSES (the mean of each house's 5 seeds), "
-             "because the between-house spread is a result in its own right and "
-             "a pooled mean alone would describe no house in the study.", "",
-             "| baseline | class | rung | success drop | range over houses | SPL drop | range over houses | n |",
-             "|---|---|---|---|---|---|---|---|"]
-    for b in [x for x in ORDER if x in set(d.baseline)]:
-        for rung in RUNGS:
-            s = d[(d.baseline == b) & (d.rung == rung)]
-            if s.empty:
-                continue
-            per_house = s.groupby("pair")["drop"].mean()
-            per_house_spl = s.groupby("pair")["spl_drop"].mean()
-            lines.append(
-                f"| {NICE[b]} | {CLASS[b]} | {rung} | "
-                f"{s['drop'].mean():.1%} | {per_house.min():.0%}–{per_house.max():.0%} | "
-                f"{s['spl_drop'].mean():.1%} | {per_house_spl.min():.0%}–{per_house_spl.max():.0%} | "
-                f"{len(s)} |")
-    return "\n".join(lines) + "\n"
+def pooled(s: pd.DataFrame, col: str, pct: bool) -> str:
+    """mean over runs, with (min-max) of the per-house means."""
+    per_house = s.groupby("pair")[col].mean()
+    f = (lambda v: f"{100 * v:.0f}%") if pct else (lambda v: f"{v:.2f}")
+    return f"{f(s[col].mean())} ({f(per_house.min())}–{f(per_house.max())})"
 
 
-def by_pair_table(d: pd.DataFrame, meta: dict) -> str:
-    lines = ["# Grid — per-house breakdown (appendix)", "",
-             "Mean ± s.d. over 5 training seeds. `target swapped` records whether "
-             "this pair's target object had a footprint-safe alternative asset: "
-             "where it did not, L2 changes the appearance of everything EXCEPT "
-             "the target, which is the study's natural control.", ""]
-    pairs = sorted(d.pair.unique(), key=lambda p: meta.get(p, {}).get("cells", 0))
+def main_table(d: pd.DataFrame, tag: str, target: dict) -> str:
+    present = [b for b in ORDER if b in set(d.baseline)]
+    n_pairs, n_seeds = d.pair.nunique(), d.seed.nunique()
+    L = [f"# Grid — main tables ({tag} environment steps)", "",
+         "Generated by `scripts/make_tables.py` — do not edit by hand. "
+         f"{n_pairs} house pairs × {n_seeds} training seeds per agent type. "
+         "Brackets = lowest–highest of the per-house means.", "",
+         "## 1. Success rate (every agent)", "",
+         "| agent | type | agents | " + " | ".join(RUNG_NAME[r] for r in RUNGS) + " |",
+         "|---|---|---|" + "---|" * len(RUNGS)]
+    for b in present:
+        sub = d[d.baseline == b]
+        n = sub[sub.rung == "A"].shape[0]
+        L.append(f"| {NICE[b]} | {CLASS[b]} | {n} | " + " | ".join(
+            pooled(sub[sub.rung == r], "success", pct=False) for r in RUNGS) + " |")
+
+    L += ["", f"## 2. Share of house-A success lost (runs with house-A success ≥ {MIN_A})", "",
+          "| agent | runs counted | house-A success | " +
+          " | ".join(RUNG_NAME[r] for r in SHIFTED) + " |",
+          "|---|---|---|" + "---|" * len(SHIFTED)]
+    for b in present:
+        sub = d[(d.baseline == b) & (d.A_success >= MIN_A)]
+        n = sub[sub.rung == "A"].shape[0]
+        total = d[(d.baseline == b) & (d.rung == "A")].shape[0]
+        L.append(f"| {NICE[b]} | {n} of {total} | {pooled(sub[sub.rung == 'A'], 'success', pct=False)} | "
+                 + " | ".join(pooled(sub[sub.rung == r], "drop", pct=True) for r in SHIFTED) + " |")
+
+    L += ["", f"## 3. Same, SPL (path efficiency; runs with house-A success ≥ {MIN_A})", "",
+          "| agent | house-A SPL | " + " | ".join(RUNG_NAME[r] for r in SHIFTED) + " |",
+          "|---|---|" + "---|" * len(SHIFTED)]
+    for b in present:
+        sub = d[(d.baseline == b) & (d.A_success >= MIN_A)]
+        L.append(f"| {NICE[b]} | {pooled(sub[sub.rung == 'A'], 'spl', pct=False)} | "
+                 + " | ".join(pooled(sub[sub.rung == r], "spl_drop", pct=True) for r in SHIFTED) + " |")
+
+    if target:
+        L += ["", "## 4. Target control: does changing ONLY the target's look hurt?", "",
+              "Each agent compared with itself in one evaluation; 20 agents per type in the four "
+              "houses where the target is swapped. Exact test; p Holm-corrected over 4 agent types. "
+              "Full detail: `results/tables/target_effect_tests.md`.", "",
+              "| agent | success, target unchanged (L2noT) | success, target changed (L2) | difference | p |",
+              "|---|---|---|---|---|"]
+        for b in present:
+            r = target[b]
+            p = r["p_holm"]
+            p_txt = "<0.0001" if p < 1e-4 else f"{p:.3f}"
+            L.append(f"| {NICE[b]} | {r['L2noT']:.2f} | {r['L2']:.2f} | {r['effect']:+.2f} | {p_txt} |")
+    return "\n".join(L) + "\n"
+
+
+def by_pair_table(d: pd.DataFrame, meta: dict, tag: str, per_house_target: dict) -> str:
+    L = [f"# Grid — per-house breakdown ({tag} environment steps, appendix)", "",
+         "Generated by `scripts/make_tables.py` — do not edit by hand. "
+         "Mean ± s.d. over the 5 training seeds, every agent. `target swapped` records "
+         "whether the target had an alternative asset with the same footprint; where it did "
+         "not (pair2), L2 changes everything except the target.", ""]
+    pairs = sorted(d.pair.unique(), key=lambda p: meta[p]["cells"])
+    present = [b for b in ORDER if b in set(d.baseline)]
     for pid in pairs:
-        m = meta.get(pid, {})
-        lines += [f"## {pid} — {m.get('target','?')}, {m.get('cells','?')} reachable cells, "
-                  f"{m.get('clutter','?')} distractors, "
-                  f"target swapped at L2: **{'yes' if m.get('swappable') else 'NO'}**", "",
-                  "| baseline | A success | L1 | L2 | L3 | A SPL | L1 | L2 | L3 |",
-                  "|---|---|---|---|---|---|---|---|---|"]
-        for b in [x for x in ORDER if x in set(d.baseline)]:
+        m = meta[pid]
+        L += [f"## {pid} — {m['target']}, {m['cells']} reachable cells, "
+              f"{m['clutter']} distractors, target swapped at L2: "
+              f"**{'yes' if m['swappable'] else 'NO'}**", "",
+              "| agent | A success | L1 | L2 | L3 | A SPL | L1 | L2 | L3 |",
+              "|---|---|---|---|---|---|---|---|---|"]
+        for b in present:
             s = d[(d.baseline == b) & (d.pair == pid)]
-            if s.empty:
-                continue
-            cells = [f"{s['A_success'].mean():.2f}"]
-            for rung in RUNGS:
-                r = s[s.rung == rung]["success"]
-                cells.append(f"{r.mean():.2f} ± {r.std():.2f}" if len(r) else "—")
-            cells.append(f"{s['A_spl'].mean():.2f}")
-            for rung in RUNGS:
-                r = s[s.rung == rung]["spl"]
-                cells.append(f"{r.mean():.2f} ± {r.std():.2f}" if len(r) else "—")
-            lines.append("| " + NICE[b] + " | " + " | ".join(cells) + " |")
-        lines.append("")
-    return "\n".join(lines) + "\n"
+            cells = []
+            for col in ("success", "spl"):
+                for rung in RUNGS:
+                    r = s[s.rung == rung][col]
+                    cells.append(f"{r.mean():.2f} ± {r.std():.2f}")
+            L.append("| " + NICE[b] + " | " + " | ".join(cells) + " |")
+        if per_house_target:
+            L += ["", "Target control (same agent, one evaluation; mean over 5 agents):", "",
+                  "| agent | L2noT success | L2 success | difference |", "|---|---|---|---|"]
+            for b in present:
+                l2n, l2 = per_house_target[b][pid]
+                L.append(f"| {NICE[b]} | {l2n:.2f} | {l2:.2f} | {l2n - l2:+.2f} |")
+        L.append("")
+    return "\n".join(L) + "\n"
+
+
+def target_results(tag: str):
+    """L2noT results for the 300k grid only (the 150k grid has no L2noT rung)."""
+    if tag != "300k":
+        return {}, {}
+    import test_target_effect as tte
+    _l, res = tte.analyse("success_rate", draws=200_000, seed=20260915)
+    data = tte.load("success_rate")
+    per_house = {a: {h: (sum(r[2] for r in rows) / len(rows), sum(r[3] for r in rows) / len(rows))
+                     for h, rows in data[a].items()} for a in data}
+    return res["within"], per_house
 
 
 def main() -> None:
-    d = load()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--grid", default="grid_300000",
+                    help="results/<grid> tree: grid_300000 (headline) or grid (150k)")
+    args = ap.parse_args()
+    d = load(args.grid)
     if d.empty:
-        raise SystemExit("no grid results under results/grid/")
+        raise SystemExit(f"no results under results/{args.grid}/")
+    counts = d[d.rung == "A"].groupby("baseline").size()
+    if set(counts) != {25}:
+        raise SystemExit(f"incomplete grid, cells per agent: {dict(counts)}")
+    tag = budget_tag(args.grid)
+    sys.path.insert(0, str(ROOT / "scripts"))
+    target, per_house = target_results(tag)
     meta = pair_meta()
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
-    for name, text in (("grid_main.md", main_table(d, meta)),
-                       ("grid_by_pair.md", by_pair_table(d, meta))):
+    for name, text in ((f"grid_main_{tag}.md", main_table(d, tag, target)),
+                       (f"grid_by_pair_{tag}.md", by_pair_table(d, meta, tag, per_house))):
         (TABLES_DIR / name).write_text(text)
         print(f"  wrote {TABLES_DIR / name}")
-    done = d.groupby("baseline").pair.count() // len(RUNGS)
-    print(f"  cells included: {dict(done)}")
+    print(f"  cells per agent: {dict(counts)}")
 
 
 if __name__ == "__main__":
