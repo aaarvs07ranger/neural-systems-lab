@@ -5,10 +5,11 @@ run with full provenance, so results never live only in scattered artifacts.
 
 Files
 -----
-results/tracker/runs.csv    canonical store — ONE ROW PER TRAINING RUN
-                            (a training run = one baseline trained with one
-                            training seed on one house pair at one shift
-                            level; its paired A/B eval fills the metrics)
+results/tracker/runs.csv    canonical store — one row per trained agent per
+                            rung it was evaluated on (legacy sweep runs have
+                            one rung, so one row)
+results/tracker/houses.csv  per-house facts (house pair x rung), incl. how much
+                            the image changed
 results/tracker/summary.md  generated view — aggregates + full table
                             (never edit by hand; rerun `render`)
 EXPERIMENT_TRACKER.md       column glossary + how-to (repo root)
@@ -18,7 +19,8 @@ numbers are never typed by hand.
 
 Subcommands
 -----------
-  backfill      (re)ingest every historical committed result (idempotent)
+  rebuild       rebuild runs.csv + houses.csv from EVERY committed result (use this)
+  backfill      (re)ingest the legacy protocol-v1 runs only
   ingest-sweep  add all seed<N>/ runs of one sweep directory
   add           add a single run from one *_transfer_summary.csv
   render        rewrite summary.md from runs.csv
@@ -77,6 +79,89 @@ PAIR0 = dict(
     object_parameters="target=Fridge",
     task="objectnav",
 )
+
+# --- severity-ladder grid provenance -------------------------------------------
+RUNG_DESC = {
+    "L1": "wall/floor materials + lighting + skybox changed",
+    "L2noT": "L1 + every object's appearance changed EXCEPT the target",
+    "L2": "L1 + every object's appearance changed, target included when swappable",
+    "L3": "L2 + {clutter} distractor objects",
+}
+BASE_RECIPE = {
+    "ppo": "SB3 PPO defaults",
+    "ppo_aug": "SB3 PPO defaults + photometric jitter (training only)",
+    "dreamerv3": "DreamerV3 train_ratio=512",
+    "tdmpc2": "TD-MPC2 upstream defaults",
+}
+PROTOCOL_V2 = "protocol v2 (held-out start poses, pinned eval poses, static scene)"
+MIN_A = 0.5  # house-A success floor for relative-drop comparisons (rule fixed 2026-09-05)
+
+# Which job trained each cell, and the repo state when it was submitted (last
+# commit before the submission timestamp; recovered 2026-09-15 from the session
+# transcript and git log). Cells not listed use the per-baseline default.
+GRID_JOBS = {
+    150_000: {"default": {"ppo": ("39573420", "28f0c5f"), "ppo_aug": ("39573421", "28f0c5f"),
+                          "dreamerv3": ("39573422", "28f0c5f"), "tdmpc2": ("39573423", "28f0c5f")}},
+    300_000: {
+        "default": {"ppo": ("39720495", "ad21a37"), "ppo_aug": ("39720496", "ad21a37"),
+                    "dreamerv3": ("39720497+39945496", "ad21a37"),
+                    "tdmpc2": ("39720498", "ad21a37")},
+        ("dreamerv3", "pair1", 0): ("39666403", "b95a196"),
+        ("dreamerv3", "pair2", 0): ("39666403", "b95a196"),
+        ("dreamerv3", "pair2", 3): ("39666403", "b95a196"),
+        ("dreamerv3", "pair3", 1): ("39666403", "b95a196"),
+        ("dreamerv3", "pair4", 3): ("39666403", "b95a196"),
+        ("dreamerv3", "pair1", 4): ("39945496_9", "720cb4d"),
+        ("tdmpc2", "pair0", 3): ("40063012_3", "3e4cede"),
+        ("tdmpc2", "pair4", 0): ("40063012_20", "3e4cede"),
+        ("tdmpc2", "pair3", 1): ("40086264_16", "973687d"),
+    },
+}
+GRID_JOB_NOTES = {
+    ("dreamerv3", "pair1", 0): "diagnostic run at 300k (job 39666403), folded into the grid; saved model later deleted by mistake",
+    ("dreamerv3", "pair2", 0): "diagnostic run at 300k (job 39666403), folded into the grid; saved model later deleted by mistake",
+    ("dreamerv3", "pair2", 3): "diagnostic run at 300k (job 39666403), folded into the grid; saved model later deleted by mistake",
+    ("dreamerv3", "pair3", 1): "diagnostic run at 300k (job 39666403), folded into the grid; saved model later deleted by mistake",
+    ("dreamerv3", "pair4", 3): "diagnostic run at 300k (job 39666403), folded into the grid; saved model later deleted by mistake",
+    ("tdmpc2", "pair3", 1): "earlier attempts 39720498_16 (CUDA fault), 40063012_16 and 40083026 (truncated checkpoint) failed; scratch cleared before this run",
+    ("tdmpc2", "pair0", 3): "first attempt 39720498_3 hit a CUDA illegal-memory fault",
+    ("tdmpc2", "pair4", 0): "first attempt 39720498_20 hit a CUDA illegal-memory fault",
+}
+EVALONLY_JOBS = {"ppo": "40083091", "ppo_aug": "40083092", "dreamerv3": "40083093", "tdmpc2": "40083094"}
+EVALONLY_COMMIT = "1eaafc6"
+RERUN_JOBS = {  # (baseline, pair, seed) -> slurm job; all submitted at 973687d
+    ("dreamerv3", "pair1", 0): "40086262_5", ("dreamerv3", "pair2", 0): "40086262_10",
+    ("dreamerv3", "pair2", 3): "40086262_13", ("dreamerv3", "pair3", 1): "40086262_16",
+    ("dreamerv3", "pair4", 3): "40086262_23", ("dreamerv3", "pair1", 4): "40086263_9",
+    ("tdmpc2", "pair2", 0): "40086264_10",
+}
+RERUN_COMMIT = "973687d"
+
+
+def pair_context(pair: str, level: str) -> Dict[str, str]:
+    """environment/object description of one house pair at one rung, from data/pairs."""
+    import json
+    d = PROJECT_ROOT / "data" / "pairs" / pair
+    idx = {p["pair_id"]: p for p in json.loads((PROJECT_ROOT / "data" / "pairs_index.json").read_text())["pairs"]}[pair]
+    cells = json.loads((d / "verification.json").read_text())["reference"]["n_reachable"]
+    swappable = bool(json.loads((d / "safe_assets.json").read_text()).get("target_swappable"))
+    clutter = json.loads((d / "l3_prune.json").read_text())["n_kept"]
+    return dict(
+        house_pair=pair, shift_level=level, task="objectnav",
+        environment_parameters=(f"procthor-10k train house {idx['house_index']}; {idx['n_rooms']} room(s); "
+                                f"{cells} reachable cells; {RUNG_DESC[level].format(clutter=clutter)}; "
+                                f"variant seed {idx['variant_seed']}"),
+        object_parameters=f"target={idx['target_object_type']}; target swappable at L2={'yes' if swappable else 'no'}",
+    )
+
+
+def first_commit_date(path: Path) -> str:
+    """Date the file first entered the repo: an upper bound on when the run finished."""
+    out = subprocess.run(["git", "log", "--diff-filter=A", "--format=%ad", "--date=short", "--", str(path)],
+                         capture_output=True, text=True, cwd=PROJECT_ROOT).stdout.split()
+    if not out:
+        raise RuntimeError(f"{path} is not committed; commit results before ingesting them")
+    return out[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +325,130 @@ def ingest_grid(df: pd.DataFrame, grid_dir: Path, **meta: Any) -> pd.DataFrame:
     return df
 
 
+def ingest_ladder(df: pd.DataFrame, budget: int) -> pd.DataFrame:
+    """Severity-ladder grid at one budget: one row per (original agent, rung).
+
+    Tree `results/grid` (150k) or `results/grid_<budget>`; rungs L1/L2/L3 from the
+    committed grid table. At 300k the L2noT rung is added per agent from the table
+    that holds BOTH L2noT and L2 for that agent in one evaluation (the same
+    `source_for` the target test uses), so the tracker and the paper can never
+    disagree. The 7 cells whose saved models were gone get their L2noT from a
+    retrained agent: those go in cohort rerun_300k, never in the grid cohort.
+    """
+    tree = "grid" if budget == 150_000 else f"grid_{budget}"
+    tag = "v2" if budget == 150_000 else f"v2-{budget // 1000}k"
+    cohort = f"grid_{budget // 1000}k"
+    jobs = GRID_JOBS[budget]
+    cells = sorted((PROJECT_ROOT / "results" / tree).glob("*/*_seed*"))
+    if len(cells) != 100:
+        raise ValueError(f"expected 100 cells under results/{tree}, found {len(cells)}")
+    n = 0
+    for cell in cells:
+        baseline = cell.parent.name
+        pair, seed_s = cell.name.split("_seed")
+        seed = int(seed_s)
+        summary = cell / f"{baseline}_transfer_summary.csv"
+        job, commit = jobs.get((baseline, pair, seed), jobs["default"][baseline])
+        base_note = GRID_JOB_NOTES.get((baseline, pair, seed), "") if budget == 300_000 else ""
+        recipe = f"{BASE_RECIPE[baseline]}; {PROTOCOL_V2}; {budget // 1000}k env steps"
+        for level in ("L1", "L2", "L3"):
+            row = make_row(summary_csv=summary, baseline=baseline, seed=seed, cohort=cohort,
+                           date=first_commit_date(summary), git_commit=commit, slurm_job=job,
+                           recipe=recipe, recipe_tag=tag, train_steps=budget,
+                           results_path=str(cell.relative_to(PROJECT_ROOT)),
+                           **pair_context(pair, level))
+            row["notes"] = _competency_note(row, base_note)
+            df = upsert(df, row); n += 1
+        if budget != 300_000:
+            continue
+        # L2noT for the ORIGINAL agent, when its model still existed
+        if (baseline, pair, seed) in RERUN_JOBS:
+            continue
+        src = _l2not_source(baseline, cell.name)
+        from_evalonly = "evalonly_300000" in str(src)
+        row = make_row(summary_csv=src, baseline=baseline, seed=seed, cohort=cohort,
+                       date=first_commit_date(src),
+                       git_commit=EVALONLY_COMMIT if from_evalonly else commit,
+                       slurm_job=EVALONLY_JOBS[baseline] if from_evalonly else job,
+                       recipe=recipe, recipe_tag=tag, train_steps=budget,
+                       results_path=str(src.parent.relative_to(PROJECT_ROOT)),
+                       **pair_context(pair, "L2noT"))
+        extra = ("L2noT measured later from the same saved model (eval-only sweep); "
+                 "A_* in this row come from that same evaluation") if from_evalonly else \
+                "L2noT measured in the run's own evaluation"
+        row["notes"] = _competency_note(row, "; ".join(x for x in (base_note, extra) if x))
+        df = upsert(df, row); n += 1
+    print(f"  {cohort}: {n} (agent, rung) rows from {len(cells)} cells")
+    return df
+
+
+def ingest_reruns(df: pd.DataFrame) -> pd.DataFrame:
+    """Retrained agents (saved model was gone). Never the headline; all five rungs."""
+    n = 0
+    for (baseline, pair, seed), job in sorted(RERUN_JOBS.items()):
+        cell = PROJECT_ROOT / "results" / "rerun_300000" / baseline / f"{pair}_seed{seed}"
+        summary = cell / f"{baseline}_transfer_summary.csv"
+        recipe = f"{BASE_RECIPE[baseline]}; {PROTOCOL_V2}; 300k env steps"
+        for level in ("L1", "L2noT", "L2", "L3"):
+            row = make_row(summary_csv=summary, baseline=baseline, seed=seed, cohort="rerun_300k",
+                           date=first_commit_date(summary), git_commit=RERUN_COMMIT, slurm_job=job,
+                           recipe=recipe, recipe_tag="v2-300k", id_suffix="rerun", train_steps=300_000,
+                           results_path=str(cell.relative_to(PROJECT_ROOT)),
+                           **pair_context(pair, level))
+            row["notes"] = _competency_note(
+                row, "retrain of a cell whose saved model was deleted; same seed, different agent; "
+                     "the original in grid_300k stays the headline; used for this cell's L2noT "
+                     "comparison and as rerun-variance evidence")
+            df = upsert(df, row); n += 1
+    print(f"  rerun_300k: {n} (agent, rung) rows from {len(RERUN_JOBS)} retrained agents")
+    return df
+
+
+def _l2not_source(baseline: str, cell: str) -> Path:
+    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+    from test_target_effect import source_for
+    return source_for(baseline, cell)
+
+
+def _competency_note(row: Dict[str, Any], note: str) -> str:
+    if row["A_success"] < MIN_A:
+        flag = (f"house-A success {row['A_success']:.2f} < {MIN_A}: left out of relative-drop "
+                "comparisons (rule fixed 2026-09-05)")
+        note = f"{note}; {flag}" if note else flag
+    return note
+
+
+def write_houses() -> None:
+    """Per-house facts (one row per pair x rung): what the agent saw, not what it did."""
+    import json
+    shift = {(r["pair"], r["level"]): r for r in
+             json.loads((PROJECT_ROOT / "results" / "tables" / "visual_shift.json").read_text())}
+    rows = []
+    for i in range(5):
+        pair = f"pair{i}"
+        d = PROJECT_ROOT / "data" / "pairs" / pair
+        ver = json.loads((d / "verification.json").read_text())
+        idx = {p["pair_id"]: p for p in json.loads((PROJECT_ROOT / "data" / "pairs_index.json").read_text())["pairs"]}[pair]
+        for level in ("L1", "L2noT", "L2", "L3"):
+            v = ver["levels"].get(level)
+            sh = shift[(pair, level)]
+            rows.append(dict(
+                house_pair=pair, shift_level=level, house_index=idx["house_index"],
+                target=idx["target_object_type"],
+                target_swappable=bool(json.loads((d / "safe_assets.json").read_text()).get("target_swappable")),
+                reachable_cells=ver["reference"]["n_reachable"],
+                clutter_kept=json.loads((d / "l3_prune.json").read_text())["n_kept"] if level == "L3" else 0,
+                gate_C1_C3_passed=(v["passed"] if v else "not recorded in verification.json"),
+                max_shortest_path_delta_m=(v["max_shortest_path_delta"] if v else ""),
+                image_mean_pixel_diff=sh["mean_abs_diff"],
+                image_frac_pixels_changed=sh["frac_pixels_changed"],
+                image_hist_l1=sh["hist_l1"],
+            ))
+    out = TRACKER_DIR / "houses.csv"
+    pd.DataFrame(rows).to_csv(out, index=False)
+    print(f"wrote {out} ({len(rows)} house x rung rows)")
+
+
 # ---------------------------------------------------------------------------
 # Historical backfill — provenance from the committed artifacts + session log.
 # git_commit values for cluster runs are the documented repo state at launch;
@@ -263,6 +472,17 @@ def cmd_backfill(_: argparse.Namespace) -> None:
                       baseline="tdmpc2", cohort="sweep", date="2026-08-01",
                       git_commit="d78f62a", slurm_job="37982716+37997516",
                       recipe="TD-MPC2 upstream defaults, 150k env steps")
+    # Originally added with `ingest-sweep` on 2026-08-24 and never listed here, so
+    # a rebuild silently dropped it (caught by the 2026-09-15 rebuild check).
+    # Metadata copied verbatim from that ingest.
+    df = ingest_sweep(df, r / "results/sweeps/ppo_aug", "ppo_aug",
+                      baseline="ppo_aug", cohort="sweep", date="2026-08-24",
+                      git_commit="8177846", slurm_job="38800341,38801317,38806927",
+                      recipe="SB3 PPO defaults + train-time photometric jitter "
+                             "(0.4/0.4/0.4, hue 36deg, per-episode), 150k env steps",
+                      notes="augmentation/domain-randomization class; no detectable "
+                            "transfer benefit vs ppo (exact permutation p=0.68); seeds "
+                            "1,2,3 needed reruns after shared-node CloudRendering failures")
 
     singles = [
         dict(summary_csv=r / "results/tables/ppo_transfer_summary.csv",
@@ -316,6 +536,28 @@ def cmd_backfill(_: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 # CLI: ingest-sweep / add
 # ---------------------------------------------------------------------------
+def cmd_rebuild(_: argparse.Namespace) -> None:
+    """Rebuild runs.csv from every committed artifact, from scratch.
+
+    Starts empty (so cohort renames cannot trip the collision guard), ingests the
+    legacy runs exactly as `backfill` does, then both ladder budgets and the
+    reruns, then writes houses.csv. Idempotent.
+    """
+    global load_runs
+    original = load_runs
+    load_runs = lambda: pd.DataFrame(columns=COLUMNS)  # noqa: E731  start from nothing
+    try:
+        cmd_backfill(_)                    # legacy sweep/main/archive rows
+    finally:
+        load_runs = original
+    df = pd.read_csv(RUNS_CSV, dtype={"seed": "Int64"})
+    df = ingest_ladder(df, 150_000)
+    df = ingest_ladder(df, 300_000)
+    df = ingest_reruns(df)
+    save_runs(df)
+    write_houses()
+
+
 def cmd_ingest_grid(a: argparse.Namespace) -> None:
     df = load_runs()
     # recipe_tag "v2" keeps grid ids distinct from the protocol-v1 sweep rows
@@ -384,7 +626,7 @@ def cmd_render(_: argparse.Namespace) -> None:
         + ", ".join(f"{k} ({v})" for k, v in df["cohort"].value_counts().items())
         + ".",
         "",
-        "## Aggregates (mean ± std over training seeds; `sweep` cohort only)",
+        "## Legacy single-house sweep (protocol v1, pair0 L1 only; superseded by the grids)",
         "",
         "Relative drops are computed per seed, then averaged (matches the "
         "committed sweep aggregates).",
@@ -406,6 +648,45 @@ def cmd_render(_: argparse.Namespace) -> None:
     order = {"ppo": 0, "ppo_aug": 1, "dreamerv3": 2, "tdmpc2": 3}
     agg_rows.sort(key=lambda r: order.get(r["baseline"], 9))
     lines += [pd.DataFrame(agg_rows).to_markdown(index=False), ""]
+
+    for cohort, title in (("grid_300k", "Severity-ladder grid, 300k env steps (HEADLINE)"),
+                          ("grid_150k", "Severity-ladder grid, 150k env steps (appendix)")):
+        g = df[df["cohort"] == cohort]
+        if g.empty:
+            continue
+        lines += [f"## {title}", "",
+                  "One row per trained agent per rung. `success` columns use every agent; "
+                  f"`share of A lost` uses agents with house-A success ≥ {MIN_A} (count shown). "
+                  "L2noT is deliberately NOT pooled here: for 7 cells it was measured on a retrained "
+                  "agent (`rerun_300k`), so an L2noT row would average different agents than the rows "
+                  "beside it. Its rows are in `runs.csv`; its analysis, each agent against itself, is "
+                  "`results/tables/target_effect_tests.md`.", ""]
+        agg = []
+        for (b_, lvl), x in g[g["shift_level"] != "L2noT"].groupby(["baseline", "shift_level"]):
+            ok = x[x["A_success"] >= MIN_A]
+            agg.append({"agent": b_, "rung": lvl, "agents": len(x),
+                        "A success": f"{x['A_success'].mean():.3f}",
+                        "rung success": f"{x['B_success'].mean():.3f}",
+                        "share of A lost": f"{100 * ok['relative_success_drop'].mean():.1f}% (n={len(ok)})",
+                        "SPL share lost": f"{100 * ok['relative_SPL_drop'].mean():.1f}%"})
+        rung_order = {"L1": 0, "L2noT": 1, "L2": 2, "L3": 3}
+        agg.sort(key=lambda r: (order.get(r["agent"], 9), rung_order.get(r["rung"], 9)))
+        lines += [pd.DataFrame(agg).to_markdown(index=False), ""]
+
+    rr = df[df["cohort"] == "rerun_300k"]
+    if not rr.empty:
+        lines += ["## Retrained agents (`rerun_300k`) — never the headline", "",
+                  "Same seed as a grid cell whose saved model was deleted; a different agent. Compare "
+                  "with the original's row of the same id minus `_rerun`.", ""]
+        view_r = rr.pivot_table(index=["baseline", "house_pair", "seed"], columns="shift_level",
+                                values="B_success").reset_index()
+        view_r.insert(3, "A", rr.groupby(["baseline", "house_pair", "seed"])["A_success"].first().values)
+        lines += [view_r.round(2).to_markdown(index=False), ""]
+
+    houses = TRACKER_DIR / "houses.csv"
+    if houses.exists():
+        lines += ["## Houses (`houses.csv`) — what the agents saw, not what they did", "",
+                  pd.read_csv(houses).to_markdown(index=False), ""]
 
     lines += ["## All runs", ""]
     view = df.copy()
@@ -472,11 +753,12 @@ def main() -> None:
                    help="distinguishes these ids from earlier protocols")
     g.add_argument("--notes", default="")
 
+    sub.add_parser("rebuild", help="rebuild runs.csv + houses.csv from every committed result")
     sub.add_parser("render", help="rewrite summary.md from runs.csv")
 
     args = p.parse_args()
     {"backfill": cmd_backfill, "ingest-sweep": cmd_ingest_sweep,
-     "ingest-grid": cmd_ingest_grid, "add": cmd_add,
+     "ingest-grid": cmd_ingest_grid, "add": cmd_add, "rebuild": cmd_rebuild,
      "render": cmd_render}[args.cmd](args)
 
 

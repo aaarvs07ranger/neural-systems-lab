@@ -1,0 +1,21 @@
+house_pair,shift_level,house_index,target,target_swappable,reachable_cells,clutter_kept,gate_C1_C3_passed,max_shortest_path_delta_m,image_mean_pixel_diff,image_frac_pixels_changed,image_hist_l1
+pair0,L1,0,Fridge,True,380,0,True,0.0,12.336,0.6154,0.7907
+pair0,L2noT,0,Fridge,True,380,0,not recorded in verification.json,,14.432,0.6522,0.8036
+pair0,L2,0,Fridge,True,380,0,True,0.4862,15.414,0.6823,0.8141
+pair0,L3,0,Fridge,True,380,4,True,0.4862,15.483,0.6827,0.8138
+pair1,L1,2,Bed,True,162,0,True,0.0,70.573,0.8715,1.4669
+pair1,L2noT,2,Bed,True,162,0,not recorded in verification.json,,73.322,0.901,1.4252
+pair1,L2,2,Bed,True,162,0,True,0.25,74.374,0.9117,1.4431
+pair1,L3,2,Bed,True,162,2,True,0.25,81.476,0.9049,1.4498
+pair2,L1,250,Bed,False,128,0,True,0.0,31.782,0.9235,1.4198
+pair2,L2noT,250,Bed,False,128,0,not recorded in verification.json,,32.996,0.9384,1.4186
+pair2,L2,250,Bed,False,128,0,True,0.0,32.996,0.9384,1.4186
+pair2,L3,250,Bed,False,128,5,True,0.0,33.0,0.9385,1.4183
+pair3,L1,44,Bed,True,460,0,True,0.0,33.759,0.9623,1.0163
+pair3,L2noT,44,Bed,True,460,0,not recorded in verification.json,,35.02,0.9754,1.0187
+pair3,L2,44,Bed,True,460,0,True,0.2609,36.196,0.9831,1.032
+pair3,L3,44,Bed,True,460,8,True,0.2609,36.189,0.9834,1.0317
+pair4,L1,286,Television,True,681,0,True,0.0,24.006,0.7289,0.8275
+pair4,L2noT,286,Television,True,681,0,not recorded in verification.json,,28.416,0.7382,0.8945
+pair4,L2,286,Television,True,681,0,True,0.0023,28.441,0.7389,0.8942
+pair4,L3,286,Television,True,681,8,True,0.0023,28.54,0.7394,0.8938
