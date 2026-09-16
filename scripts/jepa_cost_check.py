@@ -41,11 +41,18 @@ RESIZE = 224       # what these encoders expect
 SIM_MS_PER_STEP = (10.0, 40.0)
 
 
-def load(name: str, device: torch.device, half: bool):
+def load(name: str, device: torch.device, half: bool, attn: str = ""):
+    """`attn` forces an attention implementation ("sdpa" / "eager").
+
+    Left to itself, transformers picks per model class, and the two encoders can
+    end up on different kernels -- which would make a timing comparison between
+    them measure the library, not the model. Both are timed under the same
+    setting.
+    """
     from transformers import AutoModel
-    model = AutoModel.from_pretrained(name, torch_dtype=torch.float16 if half else torch.float32)
-    if hasattr(model, "vit"):          # ViTMAEModel wraps the encoder
-        pass
+    kw = {"attn_implementation": attn} if attn else {}
+    model = AutoModel.from_pretrained(
+        name, torch_dtype=torch.float16 if half else torch.float32, **kw)
     model.eval().to(device)
     for p in model.parameters():
         p.requires_grad_(False)
@@ -124,18 +131,21 @@ def main() -> None:
     ap.add_argument("--iters", type=int, default=100)
     ap.add_argument("--steps", type=int, default=300_000, help="training budget per run")
     ap.add_argument("--runs", type=int, default=50, help="2 agents x 5 houses x 5 seeds")
+    ap.add_argument("--attn", default="", choices=("", "sdpa", "eager"),
+                    help="force one attention implementation for both encoders")
     ap.add_argument("--out", default="results/tables/jepa_cost_check.json")
     a = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device} ({torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'})")
     print(f"torch {torch.__version__}")
+    print(f"attention implementation: {a.attn or 'library default (per model)'}")
     results = {}
     for key, (name, what) in MODELS.items():
         for half in (False, True):
             tag = f"{key}_{'fp16' if half else 'fp32'}"
             try:
-                model = load(name, device, half)
+                model = load(name, device, half, a.attn)
                 r = time_encoder(model, device, half, a.iters)
                 del model
                 if device.type == "cuda":
