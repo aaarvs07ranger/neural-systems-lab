@@ -85,11 +85,18 @@ def evaluate_on_house(
     n_episodes: int,
     seed_base: int,
     name: str,
+    cfg: Any = None,
 ) -> "pd.DataFrame":
     """Roll out the frozen policy for n episodes; returns per-episode metrics."""
     import pandas as pd
 
     env = make_objectnav_env(house_path, env_cfg, name=name)
+    # Agents whose vision is a frozen encoder see features, not pixels -- on
+    # every path. `wrap_if_frozen_encoder` is a no-op for every other baseline.
+    if cfg is not None:
+        from envs.frozen_encoder import wrap_if_frozen_encoder
+
+        env, _policy = wrap_if_frozen_encoder(env, cfg)
     records = []
     try:
         for ep in range(n_episodes):
@@ -204,7 +211,7 @@ def plot_transfer(
 
 def load_frozen_model(baseline: str, cfg: Any) -> Any:
     """Load the trained model for `baseline` (weights frozen, ready to predict)."""
-    if baseline in ("ppo", "ppo_aug"):
+    if baseline in ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae"):
         from stable_baselines3 import PPO
 
         # Eval envs are built raw in evaluate_on_house — train-time
@@ -289,7 +296,7 @@ def run_transfer_eval(
             continue
         df = evaluate_on_house(
             model, house_path, env_cfg, cfg.eval_episodes,
-            cfg.eval_seed_base, name=LEVEL_LABELS.get(level, level),
+            cfg.eval_seed_base, name=LEVEL_LABELS.get(level, level), cfg=cfg,
         )
         df.insert(0, "level", level)
         frames.append(df)
@@ -374,7 +381,8 @@ def run_transfer_eval(
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline", choices=("ppo", "ppo_aug", "dreamerv3", "tdmpc2"),
+    parser.add_argument("--baseline", choices=("ppo", "ppo_aug", "ppo_jepa", "ppo_mae",
+                                               "dreamerv3", "tdmpc2"),
                         default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")

@@ -203,6 +203,8 @@ class PPOConfig:
     # prefixes so ppo and ppo_aug artifacts never collide.
     baseline_name: str = "ppo"
     augment: bool = False          # train-time photometric jitter (see PPOAugConfig)
+    frozen_encoder: str = ""       # HF id of a frozen vision encoder (see PPOJepaConfig)
+    encoder_dtype: str = "fp16"    # precision for that encoder's forward pass
 
 
 # Tiny settings used by `--smoke` to verify the full pipeline mechanics quickly.
@@ -214,6 +216,48 @@ class SmokePPOConfig(PPOConfig):
     checkpoint_freq: int = 512
     max_episode_steps: int = 50
     eval_episodes: int = 3
+
+
+# ---------------------------------------------------------------------------
+# PPO on a FROZEN pretrained encoder — the "why not just use a pretrained
+# vision model?" column, and the prediction-target axis with data held fixed.
+#
+# Identical PPO, but the trained CNN is replaced by a frozen ViT: the encoder
+# never updates, only the small head learns. The two encoders are a matched
+# pair -- same architecture, same size, same ImageNet-1K pretraining data -- so
+# the ONLY difference is what each learned to predict:
+#     I-JEPA  predicts REPRESENTATIONS of masked regions
+#     MAE     predicts PIXELS of masked patches
+# which is the same axis as DreamerV3 (pixels) vs TD-MPC2 (reward/value).
+#
+# Unlike augmentation, the encoder is part of the OBSERVATION, so it is active
+# on the training and evaluation paths alike (envs/frozen_encoder.py).
+@dataclass(frozen=True)
+class PPOJepaConfig(PPOConfig):
+    baseline_name: str = "ppo_jepa"
+    frozen_encoder: str = "facebook/ijepa_vith14_1k"
+    encoder_dtype: str = "fp16"     # set by scripts/jepa_cost_check.py
+
+
+@dataclass(frozen=True)
+class PPOMaeConfig(PPOConfig):
+    baseline_name: str = "ppo_mae"
+    frozen_encoder: str = "facebook/vit-mae-huge"
+    encoder_dtype: str = "fp16"
+
+
+@dataclass(frozen=True)
+class SmokePPOJepaConfig(SmokePPOConfig):
+    baseline_name: str = "ppo_jepa"
+    frozen_encoder: str = "facebook/ijepa_vith14_1k"
+    encoder_dtype: str = "fp16"
+
+
+@dataclass(frozen=True)
+class SmokePPOMaeConfig(SmokePPOConfig):
+    baseline_name: str = "ppo_mae"
+    frozen_encoder: str = "facebook/vit-mae-huge"
+    encoder_dtype: str = "fp16"
 
 
 # ---------------------------------------------------------------------------

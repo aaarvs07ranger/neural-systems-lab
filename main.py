@@ -52,6 +52,10 @@ from config import (  # noqa: E402
     LOGS_DIR,
     DreamerV3Config,
     PPOAugConfig,
+    PPOJepaConfig,
+    PPOMaeConfig,
+    SmokePPOJepaConfig,
+    SmokePPOMaeConfig,
     PPOConfig,
     SmokeDreamerV3Config,
     SmokePPOAugConfig,
@@ -63,7 +67,7 @@ from config import (  # noqa: E402
 
 logger = logging.getLogger("main")
 
-IMPLEMENTED_BASELINES = ("ppo", "ppo_aug", "dreamerv3", "tdmpc2")
+IMPLEMENTED_BASELINES = ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "dreamerv3", "tdmpc2")
 PLANNED_BASELINES = ()
 
 # (baseline, smoke) -> config dataclass
@@ -71,6 +75,10 @@ CONFIG_CLASSES = {
     ("ppo", False): PPOConfig,
     ("ppo", True): SmokePPOConfig,
     ("ppo_aug", False): PPOAugConfig,
+    ("ppo_jepa", False): PPOJepaConfig,
+    ("ppo_jepa", True): SmokePPOJepaConfig,
+    ("ppo_mae", False): PPOMaeConfig,
+    ("ppo_mae", True): SmokePPOMaeConfig,
     ("ppo_aug", True): SmokePPOAugConfig,
     ("dreamerv3", False): DreamerV3Config,
     ("dreamerv3", True): SmokeDreamerV3Config,
@@ -94,7 +102,7 @@ def stage_train(baseline: str, cfg, pair_id: str = None) -> None:
     # The agent only ever trains in house A; the severity rung changes which
     # house is EVALUATED, so one trained model serves the whole ladder.
     pair = resolve_pair(pair_id)
-    if baseline in ("ppo", "ppo_aug"):
+    if baseline in ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae"):
         from scripts.train_ppo import train
 
         train(cfg, pair)

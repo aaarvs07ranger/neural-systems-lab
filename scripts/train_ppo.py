@@ -95,6 +95,11 @@ def train(ppo_cfg: PPOConfig, pair=None) -> Path:
             ppo_cfg.aug_saturation, ppo_cfg.aug_hue_degrees,
             ppo_cfg.aug_resample,
         )
+    # A frozen encoder IS the observation (both paths), so it wraps before the
+    # Monitor and switches the policy from CnnPolicy to a small MLP head.
+    from envs.frozen_encoder import wrap_if_frozen_encoder
+
+    env, policy_name = wrap_if_frozen_encoder(env, ppo_cfg)
     env = Monitor(
         env,
         filename=str(log_dir / "train_variant_a"),
@@ -109,7 +114,7 @@ def train(ppo_cfg: PPOConfig, pair=None) -> Path:
         name, device, ppo_cfg.total_timesteps, env_cfg.target_object_type,
     )
     model = PPO(
-        "CnnPolicy",
+        policy_name,
         env,
         n_steps=ppo_cfg.n_steps,
         batch_size=ppo_cfg.batch_size,
