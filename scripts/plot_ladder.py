@@ -49,10 +49,19 @@ RUNG_LABEL = {"A": "A\ntrain", "L1": "L1\n+materials\n+lighting",
 # of 8; normal-vision 24.0 / 20.9 against a floor of 15. Aqua is 2.74:1 on the
 # light surface, under 3:1, so the relief rule applies and every series carries
 # a direct label.
+# Six agents, three architecture classes, two members each -- so hue carries the
+# paper's axis and dash separates the members, exactly as with four. Slots 1/2/3
+# of the documented palette (blue/orange/aqua) are the set validated ALL-PAIRS in
+# both modes (worst-pair CVD dE 9.2 light / 9.4 dark; normal-vision 24.0 / 20.9),
+# which is the requirement for small multiples. Light-mode aqua is under 3:1 on
+# this surface, so the relief rule applies and the right-hand direct labels below
+# are mandatory, not decorative.
 SERIES = {
     # baseline:      (light,     dark,      dashes,      label)
     "ppo":       ("#2a78d6", "#3987e5", (),          "PPO"),
     "ppo_aug":   ("#2a78d6", "#3987e5", (5, 2),      "PPO + augmentation"),
+    "ppo_jepa":  ("#eb6834", "#d95926", (),          "PPO + JEPA (frozen)"),
+    "ppo_mae":   ("#eb6834", "#d95926", (5, 2),      "PPO + MAE (frozen)"),
     "dreamerv3": ("#1baf7a", "#199e70", (),          "DreamerV3"),
     "tdmpc2":    ("#1baf7a", "#199e70", (5, 2),      "TD-MPC2"),
 }
@@ -197,11 +206,16 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "grid_30
                       markeredgecolor=surface, label=lab)
                for _b, (c, cd, dash, lab) in SERIES.items()]
     fig.legend(handles=handles, frameon=False, fontsize=8.5, labelcolor=ink,
-               loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.035))
+               loc="lower center", ncol=6, bbox_to_anchor=(0.5, -0.035))
 
+    # Name only the agents that actually lost runs to the competency floor;
+    # listing "25/25" six times buries the one number a reader needs.
+    dropped = [f"{SERIES[b][3]} {int(counts.get(b, 0))}/25"
+               for b in SERIES if int(counts.get(b, 0)) < 25]
     which = ("every run" if all_agents else
-             f"runs with house-A success ≥ {MIN_A}: " +
-             ", ".join(f"{SERIES[b][3]} {int(counts.get(b, 0))}/25" for b in SERIES))
+             f"runs with house-A success ≥ {MIN_A}" +
+             (" (all 25/25 except " + ", ".join(dropped) + ")" if dropped
+              else ", all 25/25"))
     fig.suptitle(f"Zero-shot transfer across the severity ladder ({tag} training steps)\n"
                  f"{'Success rate' if metric=='success' else 'SPL'}, mean ±1 s.d. over training seeds; {which}",
                  color=ink, fontsize=10, x=0.008, ha="left", va="top", y=0.99, linespacing=1.5)

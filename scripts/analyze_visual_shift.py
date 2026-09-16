@@ -49,8 +49,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from test_target_effect import source_for  # noqa: E402  same-pass table per agent
 
-AGENTS = ["ppo", "ppo_aug", "tdmpc2", "dreamerv3"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
+AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3"]
+NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_mae": "PPO+MAE",
+        "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
 HOUSES = ["pair0", "pair1", "pair2", "pair3", "pair4"]
 SEEDS = range(5)
 MIN_A = 0.5

@@ -29,7 +29,7 @@ import numpy as np
 import test_target_effect as tte
 from plot_ladder import INK, SERIES
 
-ORDER = ["ppo", "ppo_aug", "tdmpc2", "dreamerv3"]
+ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3"]
 HOUSES = tte.SWAPPABLE + [tte.CONTROL]
 HOUSE_LABEL = {"pair0": "pair0\nFridge", "pair1": "pair1\nBed", "pair3": "pair3\nBed",
                "pair4": "pair4\nTV", "pair2": "pair2\ncontrol"}
@@ -44,7 +44,10 @@ def plot(mode: str) -> Path:
     data = tte.load("success_rate")
     _l, res = tte.analyse("success_rate", draws=200_000, seed=20260915)
 
-    fig, axes = plt.subplots(1, len(ORDER), figsize=(12.5, 3.6), sharey=True, facecolor=surface)
+    # Two rows of three: six panels in one row would squeeze each house label
+    # past legibility at paper width.
+    fig, axes = plt.subplots(2, 3, figsize=(12.5, 6.4), sharey=True, facecolor=surface)
+    axes = axes.ravel()
     x = np.arange(len(HOUSES), dtype=float)
     x[-1] += 0.6                                    # gap before the control
     jitter = np.linspace(-0.16, 0.16, 5)
@@ -71,10 +74,11 @@ def plot(mode: str) -> Path:
     axes[0].set_ylabel("success, target unchanged\nminus success, target changed", color=ink, fontsize=8.5)
     fig.suptitle("Does changing only the target's appearance hurt?  (300k training steps; "
                  "dot = one trained agent, bar = house mean; pair2's two houses are identical)\n"
-                 "p: exact sign-flip test over the 20 agents in pair0/1/3/4, Holm-corrected over 4 agent types",
+                 f"p: exact sign-flip test over the 20 agents in pair0/1/3/4, Holm-corrected over {len(ORDER)} agent types",
                  color=ink, fontsize=9.5, x=0.008, ha="left", va="top", y=0.99, linespacing=1.5)
     fig.tight_layout()
-    fig.subplots_adjust(top=0.72)          # room for the two-line figure title
+    fig.subplots_adjust(top=0.82, hspace=0.55)   # title room + keep row-2 titles
+                                                # clear of row-1's house labels
     out = ROOT / "results" / "plots" / f"target_effect_300k_{mode}.png"
     fig.savefig(out, dpi=220, facecolor=surface, bbox_inches="tight")
     plt.close(fig)

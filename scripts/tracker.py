@@ -64,6 +64,8 @@ COLUMNS = [
 ARCH_CLASS = {
     "ppo": "model-free on-policy",
     "ppo_aug": "model-free on-policy + photometric augmentation",
+    "ppo_jepa": "model-free on-policy + FROZEN I-JEPA encoder (representation-predictive pretraining)",
+    "ppo_mae": "model-free on-policy + FROZEN MAE encoder (pixel-predictive pretraining)",
     "dreamerv3": "reconstruction world model",
     "tdmpc2": "decoder-free latent world model + planner",
 }
@@ -90,6 +92,8 @@ RUNG_DESC = {
 BASE_RECIPE = {
     "ppo": "SB3 PPO defaults",
     "ppo_aug": "SB3 PPO defaults + photometric jitter (training only)",
+    "ppo_jepa": "SB3 PPO defaults on a frozen I-JEPA ViT-H/14 (facebook/ijepa_vith14_1k, fp16); only the MlpPolicy head trains",
+    "ppo_mae": "SB3 PPO defaults on a frozen MAE ViT-H/14 (facebook/vit-mae-huge, fp16, mask_ratio=0); only the MlpPolicy head trains",
     "dreamerv3": "DreamerV3 train_ratio=512",
     "tdmpc2": "TD-MPC2 upstream defaults",
 }
@@ -105,7 +109,10 @@ GRID_JOBS = {
     300_000: {
         "default": {"ppo": ("39720495", "ad21a37"), "ppo_aug": ("39720496", "ad21a37"),
                     "dreamerv3": ("39720497+39945496", "ad21a37"),
-                    "tdmpc2": ("39720498", "ad21a37")},
+                    "tdmpc2": ("39720498", "ad21a37"),
+                    # Added 2026-09-17, after the other four had finished.
+                    "ppo_jepa": ("40209743", "8a5b43c"),
+                    "ppo_mae": ("40209748", "8a5b43c")},
         ("dreamerv3", "pair1", 0): ("39666403", "b95a196"),
         ("dreamerv3", "pair2", 0): ("39666403", "b95a196"),
         ("dreamerv3", "pair2", 3): ("39666403", "b95a196"),
@@ -340,8 +347,12 @@ def ingest_ladder(df: pd.DataFrame, budget: int) -> pd.DataFrame:
     cohort = f"grid_{budget // 1000}k"
     jobs = GRID_JOBS[budget]
     cells = sorted((PROJECT_ROOT / "results" / tree).glob("*/*_seed*"))
-    if len(cells) != 100:
-        raise ValueError(f"expected 100 cells under results/{tree}, found {len(cells)}")
+    # 25 cells per agent (5 pairs x 5 seeds); the agent count differs by budget,
+    # since ppo_jepa/ppo_mae exist only at 300k.
+    n_agents = len({c.parent.name for c in cells})
+    if len(cells) != 25 * n_agents:
+        raise ValueError(f"results/{tree}: {len(cells)} cells across {n_agents} agents "
+                         f"is not 25 each")
     n = 0
     for cell in cells:
         baseline = cell.parent.name

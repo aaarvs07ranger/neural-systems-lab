@@ -78,8 +78,12 @@ def plot(mode: str) -> Path:
     ax1.set_ylabel("share of house-A success lost at L1 (%)", color=ink, fontsize=8.5)
     ax1.set_ylim(-5, 105)
     ax1.set_xlim(0, max(x) * 1.15)
-    ax1.set_title(f"(a) More image change ≠ more damage\n"
-                  f"rank correlation {rho:+.2f}, p = {p:.2f} (5 houses)",
+    # Six agents moved this from +0.60 to +0.80: the amount of change explains
+    # MORE than the four-agent version suggested. Still not significant with five
+    # houses (the smallest attainable p is 0.017), and still not the whole story --
+    # see the pair2/pair3 pair and panel (b) -- but the title must not claim a null.
+    ax1.set_title(f"(a) Image change explains only part of the damage\n"
+                  f"rank correlation {rho:+.2f}, p = {p:.2f} (5 houses — cannot settle this)",
                   color=ink, fontsize=9.5, loc="left")
 
     # (b)
@@ -109,7 +113,7 @@ def plot(mode: str) -> Path:
                 for _k, _p, _c, n, m in STEPS]
     ax2.legend(handles=handles, frameon=False, fontsize=8, labelcolor=ink, loc="upper right")
 
-    fig.suptitle("Damage tracks WHAT changes more than how much  (300k training steps; image change "
+    fig.suptitle("What changes matters, not only how much  (300k training steps; image change "
                  "measured from the 25 fixed start views, no agent involved)",
                  color=ink, fontsize=10, x=0.008, ha="left", va="top", y=0.99)
     fig.tight_layout()

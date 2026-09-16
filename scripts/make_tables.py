@@ -38,11 +38,15 @@ from config import GenerationConfig, TABLES_DIR, pair_dir
 
 RUNGS = ["A", "L1", "L2", "L3"]
 SHIFTED = ["L1", "L2", "L3"]
-ORDER = ["ppo", "ppo_aug", "dreamerv3", "tdmpc2"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "dreamerv3": "DreamerV3",
-        "tdmpc2": "TD-MPC2"}
-CLASS = {"ppo": "model-free", "ppo_aug": "model-free + augmentation",
-         "dreamerv3": "world model (predicts pixels)", "tdmpc2": "world model (predicts reward/value)"}
+ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "dreamerv3", "tdmpc2"]
+NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "ppo_jepa": "PPO + JEPA",
+        "ppo_mae": "PPO + MAE", "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2"}
+CLASS = {"ppo": "model-free, vision trained here",
+         "ppo_aug": "model-free + augmentation",
+         "ppo_jepa": "frozen pretrained encoder (predicts representations)",
+         "ppo_mae": "frozen pretrained encoder (predicts pixels)",
+         "dreamerv3": "world model (latent must redraw the scene)",
+         "tdmpc2": "world model (no decoder)"}
 MIN_A = 0.5
 RUNG_NAME = {"A": "A (training house)", "L1": "L1 walls/floor/light",
              "L2": "L2 + objects & target", "L3": "L3 + clutter"}
@@ -134,7 +138,7 @@ def main_table(d: pd.DataFrame, tag: str, target: dict) -> str:
     if target:
         L += ["", "## 4. Target control: does changing ONLY the target's look hurt?", "",
               "Each agent compared with itself in one evaluation; 20 agents per type in the four "
-              "houses where the target is swapped. Exact test; p Holm-corrected over 4 agent types. "
+              f"houses where the target is swapped. Exact test; p Holm-corrected over {len(target)} agent types. "
               "Full detail: `results/tables/target_effect_tests.md`.", "",
               "| agent | success, target unchanged (L2noT) | success, target changed (L2) | difference | p |",
               "|---|---|---|---|---|"]
