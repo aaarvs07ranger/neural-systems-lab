@@ -8,7 +8,11 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=00:30:00
-#SBATCH --output=/gscratch/scrubbed/%u/nsl-runs/slurm-%x-%j.out
+# NOTE (2026-09-16): /gscratch/scrubbed refuses our writes -- a shared quota is
+# exhausted group-wide (we hold 17 G of it, and df still shows 7 T free), so a
+# job writing its log there dies before it starts. Logs go to the rao fileset,
+# which accepts writes. Revert when scrubbed is usable again.
+#SBATCH --output=/gscratch/rao/%u/nsl-logs/slurm-%x-%j.out
 # Times a frozen pretrained encoder per environment step. Trains nothing, boots
 # no simulator.
 #
