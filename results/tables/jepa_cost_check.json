@@ -1,0 +1,82 @@
+{
+ "encoders": {
+  "ijepa_fp32": {
+   "ms_per_step": 47.43,
+   "feature_dim": 1280,
+   "gpu_gb": 2.44,
+   "params_m": 630.8,
+   "model_id": "facebook/ijepa_vith14_1k",
+   "learns_by": "predicts representations"
+  },
+  "ijepa_fp16": {
+   "ms_per_step": 10.45,
+   "feature_dim": 1280,
+   "gpu_gb": 1.19,
+   "params_m": 630.8,
+   "model_id": "facebook/ijepa_vith14_1k",
+   "learns_by": "predicts representations"
+  },
+  "mae_fp32": {
+   "ms_per_step": 47.61,
+   "feature_dim": 1280,
+   "gpu_gb": 2.44,
+   "params_m": 630.8,
+   "model_id": "facebook/vit-mae-huge",
+   "learns_by": "predicts pixels"
+  },
+  "mae_fp16": {
+   "ms_per_step": 13.83,
+   "feature_dim": 1280,
+   "gpu_gb": 1.19,
+   "params_m": 630.8,
+   "model_id": "facebook/vit-mae-huge",
+   "learns_by": "predicts pixels"
+  },
+  "ijepa_fp16_vs_fp32": {
+   "min_cosine_similarity": 0.999987,
+   "worst_relative_error": 14.8457,
+   "inputs": 8
+  },
+  "mae_fp16_vs_fp32": {
+   "min_cosine_similarity": 0.999999,
+   "worst_relative_error": 103.0086,
+   "inputs": 8
+  }
+ },
+ "budget": {
+  "ijepa_fp32": {
+   "encoder_hours_per_run": 3.95,
+   "encoder_gpu_hours_total": 197.6,
+   "slowdown_vs_sim": [
+    5.74,
+    2.19
+   ]
+  },
+  "ijepa_fp16": {
+   "encoder_hours_per_run": 0.87,
+   "encoder_gpu_hours_total": 43.5,
+   "slowdown_vs_sim": [
+    2.04,
+    1.26
+   ]
+  },
+  "mae_fp32": {
+   "encoder_hours_per_run": 3.97,
+   "encoder_gpu_hours_total": 198.4,
+   "slowdown_vs_sim": [
+    5.76,
+    2.19
+   ]
+  },
+  "mae_fp16": {
+   "encoder_hours_per_run": 1.15,
+   "encoder_gpu_hours_total": 57.6,
+   "slowdown_vs_sim": [
+    2.38,
+    1.35
+   ]
+  }
+ },
+ "steps": 300000,
+ "runs": 50
+}
