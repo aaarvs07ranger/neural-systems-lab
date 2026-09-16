@@ -47,6 +47,15 @@ GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
 source "${GSCRATCH_ROOT}/miniforge3/etc/profile.d/conda.sh" 2>/dev/null \
     || source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
+# ppo_jepa/ppo_mae need `transformers` for their frozen encoder, which is not in
+# the pinned env (installing it there would risk every other baseline's
+# reproducibility). It lives in a venv layered on top with --system-site-packages
+# (envs/frozen_encoder.py), so it is loaded only for these two baselines.
+if [[ "${BASELINE}" == "ppo_jepa" || "${BASELINE}" == "ppo_mae" ]]; then
+    source "${GSCRATCH_ROOT}/venvs/jepa/bin/activate"
+    export HF_HOME="${GSCRATCH_ROOT}/models/hf"
+    export HF_HUB_OFFLINE=1   # compute nodes have no internet; encoders are pre-downloaded
+fi
 
 export PYTHONUNBUFFERED=1
 export NSL_THOR_PLATFORM=cloudrendering
