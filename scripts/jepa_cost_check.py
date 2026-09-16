@@ -80,6 +80,45 @@ def time_encoder(model, device: torch.device, half: bool, iters: int) -> dict:
                 params_m=round(sum(p.numel() for p in model.parameters()) / 1e6, 1))
 
 
+@torch.no_grad()
+def fidelity(name: str, device: torch.device, iters: int = 8) -> dict:
+    """Does half precision give the same features as full precision?
+
+    Half precision is ~4x faster on I-JEPA, but the agent's whole observation is
+    this feature vector -- if fp16 distorted it, every JEPA/MAE number would be
+    measured on a different representation than the one the encoder published.
+    Compares both on identical inputs: cosine similarity and worst relative error.
+    """
+    from transformers import AutoModel
+
+    lo = AutoModel.from_pretrained(name, torch_dtype=torch.float16).eval().to(device)
+    hi = AutoModel.from_pretrained(name, torch_dtype=torch.float32).eval().to(device)
+    cos, rel = [], []
+    rng = np.random.default_rng(0)
+    for i in range(iters):
+        # A spread of inputs: flat, gradient, sinusoidal texture, noise.
+        g = np.linspace(0, 1, RESIZE, dtype=np.float32)
+        kind = i % 4
+        if kind == 0:
+            img = np.full((RESIZE, RESIZE), 0.5, np.float32)
+        elif kind == 1:
+            img = np.tile(g, (RESIZE, 1))
+        elif kind == 2:
+            img = 0.5 + 0.5 * np.sin(12 * np.pi * np.add.outer(g, g))
+        else:
+            img = rng.random((RESIZE, RESIZE), dtype=np.float32)
+        x = torch.from_numpy(img).to(device)[None, None].expand(1, 3, RESIZE, RESIZE).contiguous()
+        a_ = hi(pixel_values=x).last_hidden_state.mean(dim=1).float()
+        b_ = lo(pixel_values=x.half()).last_hidden_state.mean(dim=1).float()
+        cos.append(float(torch.nn.functional.cosine_similarity(a_, b_).item()))
+        rel.append(float(((a_ - b_).abs() / a_.abs().clamp(min=1e-6)).max().item()))
+    del lo, hi
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    return dict(min_cosine_similarity=round(min(cos), 6),
+                worst_relative_error=round(max(rel), 4), inputs=iters)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iters", type=int, default=100)
@@ -107,6 +146,15 @@ def main() -> None:
             r.update(model_id=name, learns_by=what)
             results[tag] = r
             print(f"  {tag:12s} {r}")
+
+    print("\nhalf vs full precision on identical inputs (the feature IS the observation):")
+    for key, (name, _what) in MODELS.items():
+        try:
+            f = fidelity(name, device)
+        except Exception as exc:                            # noqa: BLE001
+            f = dict(error=f"{type(exc).__name__}: {exc}")
+        results[f"{key}_fp16_vs_fp32"] = f
+        print(f"  {key:6s} {f}")
 
     print("\nwhat this costs per run and for the whole sweep:")
     summary = {}
