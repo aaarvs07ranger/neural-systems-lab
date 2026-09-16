@@ -46,6 +46,39 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
+def load_encoder(model_id: str, dtype: str = "fp16", attn: str = "", device: Optional[str] = None):
+    """Load a frozen encoder the ONE way the agent uses it.
+
+    Anything that touches these encoders -- the agent, the cost check, any later
+    analysis -- must come through here, or it measures a different model than the
+    one that runs. That is not hypothetical: the first cost check loaded ViT-MAE
+    directly and timed it with 75% of the image masked (fast, and wrong), while
+    its precision comparison unknowingly compared two DIFFERENT random maskings
+    and reported the difference as a precision effect.
+
+    Returns (model, config, torch_dtype).
+    """
+    import torch
+    from transformers import AutoConfig, AutoModel
+
+    if dtype not in ("fp16", "fp32"):
+        raise ValueError(f"dtype={dtype!r} (expected 'fp16' or 'fp32')")
+    torch_dtype = torch.float16 if dtype == "fp16" else torch.float32
+    cfg = AutoConfig.from_pretrained(model_id)
+    if getattr(cfg, "mask_ratio", None):
+        logger.info("%s: mask_ratio %.2f -> 0.0 (the agent sees the whole frame)",
+                    model_id, cfg.mask_ratio)
+        cfg.mask_ratio = 0.0
+    kw = {"attn_implementation": attn} if attn else {}
+    model = AutoModel.from_pretrained(model_id, config=cfg, torch_dtype=torch_dtype, **kw)
+    model.eval()
+    if device is not None:
+        model.to(device)
+    for p in model.parameters():
+        p.requires_grad_(False)
+    return model, cfg, torch_dtype
+
+
 class FrozenVisionEncoder(gym.ObservationWrapper):
     """uint8 (H, W, 3) frames -> float32 feature vector from a frozen ViT."""
 
@@ -59,25 +92,13 @@ class FrozenVisionEncoder(gym.ObservationWrapper):
     ) -> None:
         super().__init__(env)
         import torch
-        from transformers import AutoConfig, AutoImageProcessor, AutoModel
+        from transformers import AutoImageProcessor
 
-        if dtype not in ("fp16", "fp32"):
-            raise ValueError(f"dtype={dtype!r} (expected 'fp16' or 'fp32')")
         self._torch = torch
-        self._dtype = torch.float16 if dtype == "fp16" else torch.float32
         self._device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-
-        cfg = AutoConfig.from_pretrained(model_id)
-        # Trap 1: no masking. Pretraining masked 75% of patches; an agent must see
-        # the whole frame, and a random mask would make evaluation irreproducible.
-        if getattr(cfg, "mask_ratio", None):
-            logger.info("%s: mask_ratio %.2f -> 0.0 (the agent sees the whole frame)",
-                        model_id, cfg.mask_ratio)
-            cfg.mask_ratio = 0.0
-        self._model = AutoModel.from_pretrained(model_id, config=cfg, torch_dtype=self._dtype)
-        self._model.eval().to(self._device)
-        for p in self._model.parameters():
-            p.requires_grad_(False)
+        # Trap 1 (no masking) lives in load_encoder, so every caller gets it.
+        self._model, cfg, self._dtype = load_encoder(
+            model_id, dtype=dtype, device=str(self._device))
         self._has_cls = getattr(cfg, "model_type", "") == "vit_mae"
 
         proc = AutoImageProcessor.from_pretrained(model_id)

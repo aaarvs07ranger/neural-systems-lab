@@ -42,20 +42,13 @@ SIM_MS_PER_STEP = (10.0, 40.0)
 
 
 def load(name: str, device: torch.device, half: bool, attn: str = ""):
-    """`attn` forces an attention implementation ("sdpa" / "eager").
+    """The agent's own loader — same masking, same settings (see load_encoder)."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from envs.frozen_encoder import load_encoder
 
-    Left to itself, transformers picks per model class, and the two encoders can
-    end up on different kernels -- which would make a timing comparison between
-    them measure the library, not the model. Both are timed under the same
-    setting.
-    """
-    from transformers import AutoModel
-    kw = {"attn_implementation": attn} if attn else {}
-    model = AutoModel.from_pretrained(
-        name, torch_dtype=torch.float16 if half else torch.float32, **kw)
-    model.eval().to(device)
-    for p in model.parameters():
-        p.requires_grad_(False)
+    model, _cfg, _dt = load_encoder(name, dtype="fp16" if half else "fp32",
+                                    attn=attn, device=str(device))
     return model
 
 
@@ -96,10 +89,8 @@ def fidelity(name: str, device: torch.device, iters: int = 8) -> dict:
     measured on a different representation than the one the encoder published.
     Compares both on identical inputs: cosine similarity and worst relative error.
     """
-    from transformers import AutoModel
-
-    lo = AutoModel.from_pretrained(name, torch_dtype=torch.float16).eval().to(device)
-    hi = AutoModel.from_pretrained(name, torch_dtype=torch.float32).eval().to(device)
+    lo = load(name, device, half=True)
+    hi = load(name, device, half=False)
     cos, rel = [], []
     rng = np.random.default_rng(0)
     for i in range(iters):
