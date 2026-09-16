@@ -37,9 +37,9 @@ import numpy as np
 import pandas as pd
 
 RUNGS = ["L1", "L2", "L3"]
-ORDER = ["ppo", "ppo_aug", "dreamerv3", "tdmpc2"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "dreamerv3": "DreamerV3",
-        "tdmpc2": "TD-MPC2"}
+ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "dreamerv3", "tdmpc2"]
+NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA",
+        "ppo_mae": "PPO+MAE", "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2"}
 
 
 def load(grid: str) -> pd.DataFrame:

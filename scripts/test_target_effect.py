@@ -15,12 +15,12 @@ Tests (all fixed before looking at the numbers):
    one of the 2^20 sign patterns for the 20 agents in the four houses where the
    target was swapped (pair0, pair1, pair3, pair4). p = share of patterns whose
    mean is at least as far from zero as the real one (two-sided). Exact, no
-   random sampling. Holm-corrected across the 4 agent types.
+   random sampling. Holm-corrected across the 6 agent types.
 
 2. Is the effect bigger for one agent type than another -- stratified
    permutation. Within each house, shuffle which agent type each d belongs to;
    statistic = difference in mean d. 200,000 draws, fixed seed. Holm-corrected
-   across the 6 pairs of agent types. (A significant effect in one type and a
+   across the 15 pairs of agent types. (A significant effect in one type and a
    non-significant one in another is NOT by itself evidence they differ; this
    test is.)
 
@@ -50,8 +50,9 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = ["ppo", "ppo_aug", "tdmpc2", "dreamerv3"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
+AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3"]
+NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_mae": "PPO+MAE",
+        "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
 SWAPPABLE = ["pair0", "pair1", "pair3", "pair4"]
 CONTROL = "pair2"
 SEEDS = range(5)
@@ -222,7 +223,7 @@ def render(res_s: dict, res_spl: dict, draws: int, seed: int) -> str:
         "",
         "## 1. Is there a target effect? (exact sign-flip test, all 2^20 patterns)",
         "",
-        "| agent | L2noT success | L2 success | effect | agents better / worse / same | p | p (Holm, 4 tests) |",
+        f"| agent | L2noT success | L2 success | effect | agents better / worse / same | p | p (Holm, {len(AGENTS)} tests) |",
         "|---|---|---|---|---|---|---|",
     ]
     for a in AGENTS:
@@ -237,7 +238,7 @@ def render(res_s: dict, res_spl: dict, draws: int, seed: int) -> str:
         out.append(f"| {NICE[a]} | " + " | ".join(f"{w[a]['houses'][h]:+.3f}" for h in SWAPPABLE) + " |")
     out += ["", "## 2. Is the target effect bigger for one agent type than another?",
             f"(stratified permutation within house, {draws:,} draws)", "",
-            "| comparison | difference in effect | p | p (Holm, 6 tests) |", "|---|---|---|---|"]
+            f"| comparison | difference in effect | p | p (Holm, {len(res_s['between'])} tests) |", "|---|---|---|---|"]
     for (a, b), r in res_s["between"].items():
         out.append(f"| {NICE[a]} minus {NICE[b]} | {r['diff']:+.3f} | {fmt_p(r['p'])} | {fmt_p(r['p_holm'])} |")
     out += ["", "## 3. Negative control: pair2 (L2noT and L2 are the same house file)", "",
