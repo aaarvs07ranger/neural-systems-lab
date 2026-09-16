@@ -159,7 +159,7 @@ def main() -> None:
     print("\nwhat this costs per run and for the whole sweep:")
     summary = {}
     for tag, r in results.items():
-        if "error" in r:
+        if "error" in r or "ms_per_step" not in r:   # skip the precision-comparison rows
             continue
         enc_h = r["ms_per_step"] * a.steps / 1000 / 3600
         summary[tag] = dict(
