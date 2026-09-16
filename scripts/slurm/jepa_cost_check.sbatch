@@ -10,13 +10,18 @@
 #SBATCH --time=00:30:00
 #SBATCH --output=/gscratch/scrubbed/%u/nsl-runs/slurm-%x-%j.out
 # Times a frozen pretrained encoder per environment step. Trains nothing, boots
-# no simulator. Runs in the CLONED env (nsl-jepa): the pinned `nsl` env that
-# produced every committed result is never touched.
+# no simulator.
+#
+# Environment: the pinned `nsl` conda env plus a venv layered on top of it
+# (`venvs/jepa`, created with --system-site-packages) that adds `transformers`
+# and nothing else. The pinned env, which produced every committed result, is
+# read-only here: a package added for this experiment cannot change it.
 set -euo pipefail
 
 GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
 source "${GSCRATCH_ROOT}/miniforge3/etc/profile.d/conda.sh"
-conda activate "${GSCRATCH_ROOT}/conda-envs/nsl-jepa"
+conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
+source "${GSCRATCH_ROOT}/venvs/jepa/bin/activate"
 
 export PYTHONUNBUFFERED=1
 # Encoders were downloaded on the login node; compute nodes may have no internet.
