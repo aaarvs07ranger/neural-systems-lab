@@ -105,8 +105,19 @@ class FrozenVisionEncoder(gym.ObservationWrapper):
         proc = AutoImageProcessor.from_pretrained(model_id)
         mean = tuple(getattr(proc, "image_mean", IMAGENET_MEAN))
         std = tuple(getattr(proc, "image_std", IMAGENET_STD))
+        # The size that matters is what the model actually SEES. I-JEPA and MAE
+        # state it directly (224). DINOv2's published pipeline instead resizes
+        # the short edge to 256 and then centre-crops to 224, so reading `size`
+        # alone would feed it 256 -- a resolution it was never trained at, and
+        # a different one from the other two encoders, which would confound
+        # every comparison between them. Prefer the crop when there is one.
         size = getattr(proc, "size", {}) or {}
-        self._size = int(image_size or size.get("height") or size.get("shortest_edge") or 224)
+        crop = getattr(proc, "crop_size", None) or {}
+        if getattr(proc, "do_center_crop", False) and crop:
+            self._size = int(image_size or crop.get("height") or crop.get("width"))
+        else:
+            self._size = int(image_size or size.get("height")
+                             or size.get("shortest_edge") or 224)
         self._mean = torch.tensor(mean, device=self._device).view(1, 3, 1, 1).to(self._dtype)
         self._std = torch.tensor(std, device=self._device).view(1, 3, 1, 1).to(self._dtype)
 

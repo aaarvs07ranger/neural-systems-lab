@@ -71,7 +71,8 @@ class _FakeModel(torch.nn.Module):
 
 
 def _install_fake_transformers(model_type: str, mask_ratio: float,
-                               n_registers: int = 0) -> _FakeModel:
+                               n_registers: int = 0,
+                               crop_16_from_32: bool = False) -> _FakeModel:
     cfg = _Cfg(model_type, mask_ratio, n_registers)
     holder = {}
 
@@ -95,6 +96,12 @@ def _install_fake_transformers(model_type: str, mask_ratio: float,
             proc.image_mean = (0.5, 0.5, 0.5)
             proc.image_std = (0.5, 0.5, 0.5)
             proc.size = {"height": 16, "width": 16}
+            if crop_16_from_32:
+                # DINOv2's shape: resize the short edge to one size, then
+                # centre-crop to a smaller one. What the model sees is the CROP.
+                proc.size = {"shortest_edge": 32}
+                proc.crop_size = {"height": 16, "width": 16}
+                proc.do_center_crop = True
             return proc
 
     mod = types.ModuleType("transformers")
@@ -123,8 +130,10 @@ class _StubEnv:
         return self._frame(150), 0.0, False, False, {}
 
 
-def _wrapper(model_type="ijepa", mask_ratio=0.0, dtype="fp32", n_registers=0):
-    holder = _install_fake_transformers(model_type, mask_ratio, n_registers)
+def _wrapper(model_type="ijepa", mask_ratio=0.0, dtype="fp32", n_registers=0,
+             crop_16_from_32=False):
+    holder = _install_fake_transformers(model_type, mask_ratio, n_registers,
+                                        crop_16_from_32)
     from envs.frozen_encoder import FrozenVisionEncoder
     return FrozenVisionEncoder(_StubEnv(), "fake/model", device="cpu", dtype=dtype), holder
 
@@ -208,6 +217,18 @@ def test_rejects_unknown_dtype() -> None:
     except ValueError:
         return
     raise AssertionError("expected ValueError for an unsupported dtype")
+
+
+def test_centre_crop_size_wins_over_resize_size() -> None:
+    """DINOv2 resizes the short edge to 256 and then crops to 224, so 224 is
+    what the model sees -- and it is also what I-JEPA and MAE see, which is what
+    keeps the three encoders comparable. Reading the resize size would feed it a
+    resolution it was never trained at."""
+    w, _h = _wrapper(model_type="dinov2", crop_16_from_32=True)
+    assert w._size == 16, f"used the resize size, not the crop: {w._size}"
+    # ...and it still pools the right tokens at that size.
+    feat = w.observation(np.full((16, 16, 3), 40, dtype=np.uint8))
+    assert feat.max() < 900
 
 
 def test_class_and_register_tokens_are_all_excluded() -> None:
