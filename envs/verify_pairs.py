@@ -268,6 +268,19 @@ def main() -> None:
                         pair_id)
             continue
         out = pair_dir(pair_id) / "verification.json"
+        # MERGE, never overwrite. Checking a newly added rung must not erase the
+        # record for the rungs every committed result already depends on -- and
+        # a record that silently lost its L1 entry would still read "passed".
+        if out.exists():
+            previous = json.loads(out.read_text())
+            kept = {lv: e for lv, e in previous.get("levels", {}).items()
+                    if lv not in result["levels"]}
+            if kept:
+                logger.info("[%s] keeping earlier records for %s",
+                            pair_id, ", ".join(sorted(kept)))
+            result["levels"] = {**kept, **result["levels"]}
+            result["passed"] = all(e["passed"] for e in result["levels"].values())
+        result["levels_checked_this_run"] = list(levels)
         out.write_text(json.dumps(result, indent=2))
         logger.info("[%s] wrote %s -> %s", pair_id, out,
                     "PASS" if result["passed"] else "FAIL")
