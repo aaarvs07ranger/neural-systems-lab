@@ -50,7 +50,7 @@ CELL="${PAIR}_seed${SEED}"
 
 # pair2's target has no footprint-safe alternative, so it has no "target only"
 # house. A missing rung is skipped with a warning, not a crash.
-LEVELS="${NSL_LEVELS:-F_objall,F_clut,F_obj,F_tgt,F_mat,F_light,F_sky,L1,L2,L3}"
+LEVELS="${NSL_LEVELS:-F_objall,F_clut,F_obj,F_tgt,F_mat,F_light,F_sky,L1,L2noT,L2,L3}"
 
 GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
 source "${GSCRATCH_ROOT}/miniforge3/etc/profile.d/conda.sh" 2>/dev/null \
