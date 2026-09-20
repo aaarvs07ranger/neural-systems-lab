@@ -399,8 +399,12 @@ def main() -> None:
     from config import (
         DreamerV3Config,
         PPOAugConfig,
+        PPOJepaConfig,
+        PPOMaeConfig,
         SmokeDreamerV3Config,
         SmokePPOAugConfig,
+        SmokePPOJepaConfig,
+        SmokePPOMaeConfig,
         SmokeTDMPC2Config,
         TDMPC2Config,
     )
@@ -410,6 +414,11 @@ def main() -> None:
         ("ppo", True): SmokePPOConfig,
         ("ppo_aug", False): PPOAugConfig,
         ("ppo_aug", True): SmokePPOAugConfig,
+        # Without these two, --baseline accepted them and then raised KeyError.
+        ("ppo_jepa", False): PPOJepaConfig,
+        ("ppo_jepa", True): SmokePPOJepaConfig,
+        ("ppo_mae", False): PPOMaeConfig,
+        ("ppo_mae", True): SmokePPOMaeConfig,
         ("dreamerv3", False): DreamerV3Config,
         ("dreamerv3", True): SmokeDreamerV3Config,
         ("tdmpc2", False): TDMPC2Config,
