@@ -56,7 +56,7 @@ GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
 source "${GSCRATCH_ROOT}/miniforge3/etc/profile.d/conda.sh" 2>/dev/null \
     || source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
-if [[ "${BASELINE}" == "ppo_jepa" || "${BASELINE}" == "ppo_mae" ]]; then
+if [[ "${BASELINE}" == ppo_jepa || "${BASELINE}" == ppo_mae || "${BASELINE}" == ppo_dino ]]; then
     # Frozen encoders need `transformers`, which is not in the pinned env.
     source "${GSCRATCH_ROOT}/venvs/jepa/bin/activate"
     export HF_HOME="${GSCRATCH_ROOT}/models/hf"

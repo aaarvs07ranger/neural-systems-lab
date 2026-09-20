@@ -28,9 +28,15 @@ N_PATCHES = 4
 
 
 class _Cfg:
-    def __init__(self, model_type: str, mask_ratio: float = 0.0) -> None:
+    def __init__(self, model_type: str, mask_ratio: float = 0.0,
+                 n_registers: int = 0) -> None:
         self.model_type = model_type
         self.mask_ratio = mask_ratio
+        # 16px image / patch 8 => 2x2 = 4 patches, matching N_PATCHES. The
+        # wrapper counts patches to work out how many non-image tokens sit in
+        # front of them, so this has to be self-consistent.
+        self.patch_size = 8
+        self.num_register_tokens = n_registers
 
 
 class _Out:
@@ -54,16 +60,19 @@ class _FakeModel(torch.nn.Module):
 
     def forward(self, pixel_values: torch.Tensor):  # noqa: D401
         self.calls += 1
-        n = N_PATCHES + (1 if self.cfg.model_type == "vit_mae" else 0)
+        prefix = (1 if self.cfg.model_type in ("vit_mae", "dinov2") else 0)
+        prefix += int(self.cfg.num_register_tokens)
+        n = N_PATCHES + prefix
         base = pixel_values.mean()
         toks = torch.stack([base * (k + 1) for k in range(n)]).view(1, n, 1)
-        if self.cfg.model_type == "vit_mae":
-            toks[0, 0] = 999.0                      # CLS: must not be pooled
+        for k in range(prefix):
+            toks[0, k] = 999.0        # CLS + registers: must not be pooled
         return _Out(toks.expand(1, n, HIDDEN).to(pixel_values.dtype))
 
 
-def _install_fake_transformers(model_type: str, mask_ratio: float) -> _FakeModel:
-    cfg = _Cfg(model_type, mask_ratio)
+def _install_fake_transformers(model_type: str, mask_ratio: float,
+                               n_registers: int = 0) -> _FakeModel:
+    cfg = _Cfg(model_type, mask_ratio, n_registers)
     holder = {}
 
     class AutoConfig:
@@ -114,8 +123,8 @@ class _StubEnv:
         return self._frame(150), 0.0, False, False, {}
 
 
-def _wrapper(model_type="ijepa", mask_ratio=0.0, dtype="fp32"):
-    holder = _install_fake_transformers(model_type, mask_ratio)
+def _wrapper(model_type="ijepa", mask_ratio=0.0, dtype="fp32", n_registers=0):
+    holder = _install_fake_transformers(model_type, mask_ratio, n_registers)
     from envs.frozen_encoder import FrozenVisionEncoder
     return FrozenVisionEncoder(_StubEnv(), "fake/model", device="cpu", dtype=dtype), holder
 
@@ -199,6 +208,30 @@ def test_rejects_unknown_dtype() -> None:
     except ValueError:
         return
     raise AssertionError("expected ValueError for an unsupported dtype")
+
+
+def test_class_and_register_tokens_are_all_excluded() -> None:
+    """DINOv3 prepends a class token AND four registers -- bookkeeping slots,
+    not picture. The wrapper works out how many to drop by counting the patches
+    the image must produce, so it needs no per-model table."""
+    w, _h = _wrapper(model_type="dinov2", n_registers=4)
+    feat = w.observation(np.full((16, 16, 3), 40, dtype=np.uint8))
+    assert feat.max() < 900, f"a prefix token (999) leaked into the feature: {feat.max()}"
+
+
+def test_miscounted_tokens_raise_rather_than_pool_the_wrong_set() -> None:
+    """Negative control: if the token count cannot be explained by the patch
+    grid, pooling silently over the wrong set is the failure we cannot detect
+    downstream, so it must raise instead."""
+    try:
+        # 1 class token + 9 registers is more prefix than any real encoder has,
+        # so the count cannot be explained by the patch grid. The wrapper probes
+        # its feature width when it is built, so this raises there.
+        _wrapper(model_type="dinov2", n_registers=9)
+    except RuntimeError as exc:
+        assert "tokens" in str(exc), exc
+    else:
+        raise AssertionError("a token count it cannot explain must raise")
 
 
 if __name__ == "__main__":

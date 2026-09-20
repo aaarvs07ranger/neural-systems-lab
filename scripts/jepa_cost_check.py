@@ -33,6 +33,9 @@ import torch
 MODELS = {
     "ijepa": ("facebook/ijepa_vith14_1k", "predicts representations"),
     "mae": ("facebook/vit-mae-huge", "predicts pixels"),
+    # 1.1B parameters against the other two's 631M, so its cost has to be
+    # measured rather than assumed from theirs.
+    "dinov2": ("facebook/dinov2-giant", "self-distillation, no labels"),
 }
 OBS = 128          # our observation is 128x128x3 uint8
 RESIZE = 224       # what these encoders expect
@@ -119,6 +122,8 @@ def fidelity(name: str, device: torch.device, iters: int = 8) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--models", default="",
+                    help="comma-separated keys from MODELS (default: all)")
     ap.add_argument("--iters", type=int, default=100)
     ap.add_argument("--steps", type=int, default=300_000, help="training budget per run")
     ap.add_argument("--runs", type=int, default=50, help="2 agents x 5 houses x 5 seeds")
@@ -132,7 +137,9 @@ def main() -> None:
     print(f"torch {torch.__version__}")
     print(f"attention implementation: {a.attn or 'library default (per model)'}")
     results = {}
-    for key, (name, what) in MODELS.items():
+    wanted = [k.strip() for k in args.models.split(",") if k.strip()] or list(MODELS)
+    for key in wanted:
+        name, what = MODELS[key]
         for half in (False, True):
             tag = f"{key}_{'fp16' if half else 'fp32'}"
             try:
@@ -149,7 +156,8 @@ def main() -> None:
             print(f"  {tag:12s} {r}")
 
     print("\nhalf vs full precision on identical inputs (the feature IS the observation):")
-    for key, (name, _what) in MODELS.items():
+    for key in wanted:
+        name, _what = MODELS[key]
         try:
             f = fidelity(name, device)
         except Exception as exc:                            # noqa: BLE001

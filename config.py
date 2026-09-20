@@ -246,6 +246,32 @@ class PPOMaeConfig(PPOConfig):
     encoder_dtype: str = "fp16"
 
 
+# DINOv2 — the frozen encoder robotics actually uses (OpenVLA's vision backbone
+# is DINOv2). Vishwas asked for it (2026-09-19) on the grounds that DINO-style
+# latents make more sense than a pixel- or representation-reconstruction
+# objective. It answers a DIFFERENT question from the JEPA/MAE pair: not "which
+# pretraining objective", but "does the strongest available frozen encoder fix
+# appearance binding at all". Not a matched pair -- trained on LVD-142M rather
+# than ImageNet-1K, and 1536-d features rather than 1280 -- so it is reported
+# as its own column, never as a third point on the JEPA/MAE axis.
+#
+# DINOv3 is the newer one and was the first choice; its weights are gated behind
+# a manual approval that had not come through (2026-09-21). Swapping the id here
+# is the only change that run needs.
+@dataclass(frozen=True)
+class PPODinoConfig(PPOConfig):
+    baseline_name: str = "ppo_dino"
+    frozen_encoder: str = "facebook/dinov2-giant"
+    encoder_dtype: str = "fp16"
+
+
+@dataclass(frozen=True)
+class SmokePPODinoConfig(SmokePPOConfig):
+    baseline_name: str = "ppo_dino"
+    frozen_encoder: str = "facebook/dinov2-giant"
+    encoder_dtype: str = "fp16"
+
+
 @dataclass(frozen=True)
 class SmokePPOJepaConfig(SmokePPOConfig):
     baseline_name: str = "ppo_jepa"

@@ -382,7 +382,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", choices=("ppo", "ppo_aug", "ppo_jepa", "ppo_mae",
-                                               "dreamerv3", "tdmpc2"),
+                                               "ppo_dino", "dreamerv3", "tdmpc2"),
                         default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")
@@ -400,10 +400,12 @@ def main() -> None:
         DreamerV3Config,
         PPOAugConfig,
         PPOJepaConfig,
+        PPODinoConfig,
         PPOMaeConfig,
         SmokeDreamerV3Config,
         SmokePPOAugConfig,
         SmokePPOJepaConfig,
+        SmokePPODinoConfig,
         SmokePPOMaeConfig,
         SmokeTDMPC2Config,
         TDMPC2Config,
@@ -419,6 +421,8 @@ def main() -> None:
         ("ppo_jepa", True): SmokePPOJepaConfig,
         ("ppo_mae", False): PPOMaeConfig,
         ("ppo_mae", True): SmokePPOMaeConfig,
+        ("ppo_dino", False): PPODinoConfig,
+        ("ppo_dino", True): SmokePPODinoConfig,
         ("dreamerv3", False): DreamerV3Config,
         ("dreamerv3", True): SmokeDreamerV3Config,
         ("tdmpc2", False): TDMPC2Config,

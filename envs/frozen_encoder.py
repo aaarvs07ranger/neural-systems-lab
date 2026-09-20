@@ -99,7 +99,8 @@ class FrozenVisionEncoder(gym.ObservationWrapper):
         # Trap 1 (no masking) lives in load_encoder, so every caller gets it.
         self._model, cfg, self._dtype = load_encoder(
             model_id, dtype=dtype, device=str(self._device))
-        self._has_cls = getattr(cfg, "model_type", "") == "vit_mae"
+        self._cfg = cfg
+        self._patch = int(getattr(cfg, "patch_size", 0) or 0)
 
         proc = AutoImageProcessor.from_pretrained(model_id)
         mean = tuple(getattr(proc, "image_mean", IMAGENET_MEAN))
@@ -120,6 +121,25 @@ class FrozenVisionEncoder(gym.ObservationWrapper):
         h, w = self.env.observation_space.shape[:2]
         return self._encode(np.zeros((h, w, 3), dtype=np.uint8)).shape[0]
 
+    def _n_prefix_tokens(self, n_tokens: int) -> int:
+        """How many non-patch tokens the encoder puts in front of the patches.
+
+        (image_size / patch_size)^2 patches must be there; anything extra is a
+        class token and/or register tokens, which are bookkeeping slots and not
+        part of the picture. Raises rather than guessing: a silent miscount
+        would average the wrong token set and nothing downstream would notice.
+        """
+        if not self._patch:
+            return 0
+        patches = (self._size // self._patch) ** 2
+        prefix = n_tokens - patches
+        if prefix < 0 or prefix > 8:
+            raise RuntimeError(
+                f"{n_tokens} tokens but {patches} patches expected "
+                f"({self._size}px / patch {self._patch}) — cannot tell which "
+                "tokens are the image")
+        return prefix
+
     def _encode(self, frame: np.ndarray) -> np.ndarray:
         torch = self._torch
         with torch.no_grad():
@@ -129,8 +149,13 @@ class FrozenVisionEncoder(gym.ObservationWrapper):
                                                 mode="bilinear", align_corners=False)
             x = (x - self._mean) / self._std
             tokens = self._model(pixel_values=x).last_hidden_state
-            if self._has_cls:                      # trap 2: patch tokens only
-                tokens = tokens[:, 1:, :]
+            # Trap 2, generalised: pool PATCH tokens only. Rather than keep a
+            # list of which encoder prepends what (MAE a class token, I-JEPA
+            # nothing, DINOv2 a class token, DINOv3 a class token plus four
+            # registers), count the patches the image must produce and drop
+            # whatever sits in front of them. Correct by construction for any
+            # encoder, including ones not written yet.
+            tokens = tokens[:, self._n_prefix_tokens(tokens.shape[1]):, :]
             feat = tokens.mean(dim=1)
         return feat.float().squeeze(0).cpu().numpy()
 
