@@ -137,7 +137,7 @@ def main() -> None:
     print(f"torch {torch.__version__}")
     print(f"attention implementation: {a.attn or 'library default (per model)'}")
     results = {}
-    wanted = [k.strip() for k in args.models.split(",") if k.strip()] or list(MODELS)
+    wanted = [k.strip() for k in a.models.split(",") if k.strip()] or list(MODELS)
     for key in wanted:
         name, what = MODELS[key]
         for half in (False, True):
