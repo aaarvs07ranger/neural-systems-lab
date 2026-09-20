@@ -211,7 +211,7 @@ def plot_transfer(
 
 def load_frozen_model(baseline: str, cfg: Any) -> Any:
     """Load the trained model for `baseline` (weights frozen, ready to predict)."""
-    if baseline in ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae"):
+    if baseline in ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino"):
         from stable_baselines3 import PPO
 
         # Eval envs are built raw in evaluate_on_house — train-time
