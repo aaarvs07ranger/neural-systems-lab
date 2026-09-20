@@ -4,11 +4,14 @@
 #   sbatch scripts/slurm/factor_eval.sbatch ppo
 #   sbatch scripts/slurm/factor_eval.sbatch dreamerv3 300000
 #
-# WHAT THIS ADDS. The severity ladder is cumulative, so it cannot say which
-# individual change did the damage. envs/make_single_factor.py derives six
-# houses per pair that each change exactly one thing. The agent only ever
-# TRAINS in house A, so measuring them needs no retraining -- just more houses
-# to evaluate the existing checkpoints in.
+# WHAT THIS ADDS. The severity ladder is cumulative -- L2 changes object
+# appearances on top of L1's repaint, L3 adds clutter on top of both -- so it
+# cannot say what each rung costs on its own. These houses run the rungs
+# INDEPENDENTLY: F_objall is L2's change without the repaint, F_clut is L3's
+# change alone, and L1 alone is the frozen b_L1 (it is the bottom rung). F_obj /
+# F_tgt split L2's change by whether the target itself changed, and F_mat /
+# F_light / F_sky split L1's. The agent only ever TRAINS in house A, so none of
+# this needs retraining -- just more houses to evaluate the checkpoints in.
 #
 # L1 and L2 ARE RE-MEASURED IN THE SAME PASS, deliberately. The question the
 # factors exist to answer is "do the parts add up to the whole", and world-model
@@ -47,7 +50,7 @@ CELL="${PAIR}_seed${SEED}"
 
 # pair2's target has no footprint-safe alternative, so it has no "target only"
 # house. A missing rung is skipped with a warning, not a crash.
-LEVELS="${NSL_LEVELS:-F_mat,F_light,F_sky,F_obj,F_tgt,F_clut,L1,L2}"
+LEVELS="${NSL_LEVELS:-F_objall,F_clut,F_obj,F_tgt,F_mat,F_light,F_sky,L1,L2}"
 
 GSCRATCH_ROOT="${NSL_GSCRATCH:-/gscratch/rao/${USER}}"
 source "${GSCRATCH_ROOT}/miniforge3/etc/profile.d/conda.sh" 2>/dev/null \

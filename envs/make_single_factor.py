@@ -1,13 +1,21 @@
-"""Single-change evaluation houses: each one changes exactly ONE thing.
+"""Each rung of the ladder, taken ALONE.
 
-The severity ladder is CUMULATIVE -- L1 repaints the room, L2 adds new object
-appearances on top of that, L3 adds clutter on top of that. It answers "how far
-can we push this before the agent breaks", but it cannot say which individual
-change did the damage, because every rung above L1 contains all the rungs below
-it. Vishwas asked for the other half (2026-09-19): change one thing at a time.
+The severity ladder is CUMULATIVE -- L1 repaints the room, L2 changes object
+appearances ON TOP of that repaint, L3 adds clutter on top of both. So it can
+say how far the agent survives, but not what each individual change costs,
+because every rung above L1 contains the ones below it. Vishwas asked for the
+other half (2026-09-19): run the rungs independently.
 
-    A + materials          A + lighting          A + sky
-    A + other objects      A + the target        A + clutter
+    L1 alone   = the frozen b_L1 -- it is the bottom rung, so it already is
+    L2 alone   = F_objall   object appearances change, the room is NOT repainted
+    L3 alone   = F_clut     clutter appears, nothing else changes
+
+Two finer splits come free in the same evaluation pass, because attribution is
+the whole point of running these at all:
+
+    within L1  F_mat (materials) · F_light (lighting) · F_sky (the sky)
+    within L2  F_obj (everything except the target) · F_tgt (the target only)
+               -- and F_obj + F_tgt is asserted to equal F_objall exactly
 
 **These are DERIVED from the frozen houses, never redrawn.** Each factor copies
 the fields it owns out of the already-verified stacked house and writes them
@@ -64,6 +72,14 @@ FACTORS: Dict[str, Tuple[str, str, str]] = {
     "F_obj":   ("L2", "L2", "the look of every object except the target"),
     "F_tgt":   ("L2", "L2", "the look of the target only"),
     "F_clut":  ("L3", "L3", "added clutter"),
+}
+# The rungs, each taken ALONE -- what the ladder cannot measure, because every
+# rung above L1 contains the ones below it. L1 alone already exists (it is the
+# bottom rung); this is L2's change without L1, and L3's change is F_clut.
+# F_objall is not part of the decomposition above -- it is exactly F_obj plus
+# F_tgt, asserted below -- so it is built separately and never composed.
+EXTRA: Dict[str, Tuple[str, str, str]] = {
+    "F_objall": ("L2", "L2", "the look of every object, target included (L2's change without L1)"),
 }
 # Order matters: composing them in this order must rebuild L1, then L2, then L3.
 ORDER: Tuple[str, ...] = ("F_mat", "F_light", "F_sky", "F_obj", "F_tgt", "F_clut")
@@ -148,6 +164,21 @@ def f_obj(dst: House, src: House, target: str) -> Dict[str, Any]:
     return _copy_assets(dst, src, target, want_target=False)
 
 
+def f_objall(dst: House, src: House, target: str) -> Dict[str, Any]:
+    """Every object's appearance, target included: L2's change, without L1's
+    repaint. This is the rung-taken-alone house; F_obj and F_tgt split the same
+    change in two to attribute it to the target or its surroundings."""
+    src_by_id = _by_id(src.get("objects", []))
+    swaps = 0
+    for obj in _iter_objects(dst.get("objects", [])):
+        other = src_by_id.get(str(obj.get("id")))
+        if other is None or "assetId" not in other:
+            continue
+        swaps += obj.get("assetId") != other["assetId"]
+        obj["assetId"] = other["assetId"]
+    return {"n_swapped": int(swaps)}
+
+
 def f_tgt(dst: House, src: House, target: str) -> Dict[str, Any]:
     """The target's appearance only. A no-op where the target has no
     footprint-safe alternative (pair2), which is why that pair gets no F_tgt
@@ -185,8 +216,9 @@ def f_clut(dst: House, src: House, target: str) -> Dict[str, Any]:
 
 BUILDERS: Dict[str, Callable[[House, House, str], Dict[str, Any]]] = {
     "F_mat": f_mat, "F_light": f_light, "F_sky": f_sky,
-    "F_obj": f_obj, "F_tgt": f_tgt, "F_clut": f_clut,
+    "F_obj": f_obj, "F_tgt": f_tgt, "F_clut": f_clut, "F_objall": f_objall,
 }
+ALL_FACTORS: Tuple[str, ...] = ORDER + tuple(EXTRA)
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +231,7 @@ def _apply(base: House, factors: Tuple[str, ...], sources: Dict[str, House],
     house = copy.deepcopy(base)
     report: Dict[str, Any] = {}
     for name in factors:
-        src_level = FACTORS[name][0]
+        src_level = (FACTORS.get(name) or EXTRA[name])[0]
         report[name] = BUILDERS[name](house, sources[src_level], target)
     return house, report
 
@@ -231,7 +263,15 @@ def build_pair(pair_id: str, write: bool = True) -> Dict[str, Any]:
         "pair": pair_id, "target": target, "derived_from": "committed a/b_L1/b_L2/b_L3",
         "recomposition_exact": recomposition, "factors": {},
     }
-    for name in ORDER:
+    # F_objall must be exactly the two object factors applied together, or the
+    # rung-taken-alone house and the attribution split would disagree.
+    combined, _ = _apply(house_a, ("F_obj", "F_tgt"), sources, target)
+    alone, _ = _apply(house_a, ("F_objall",), sources, target)
+    if combined != alone:
+        raise AssertionError(f"{pair_id}: F_objall != F_obj + F_tgt. Nothing written.")
+    record["objall_equals_obj_plus_tgt"] = True
+
+    for name in ALL_FACTORS:
         house, rep = _apply(house_a, (name,), sources, target)
         detail = rep[name]
         if house == house_a:
@@ -241,9 +281,10 @@ def build_pair(pair_id: str, write: bool = True) -> Dict[str, Any]:
                                        **detail}
             logger.warning("%s %s: identical to house A, not written", pair_id, name)
             continue
-        assert_structurally_identical(house_a, house, level=FACTORS[name][1],
+        spec = FACTORS.get(name) or EXTRA[name]
+        assert_structurally_identical(house_a, house, level=spec[1],
                                       target_object_type=target)
-        record["factors"][name] = {"written": True, "description": FACTORS[name][2],
+        record["factors"][name] = {"written": True, "description": spec[2],
                                    **detail}
         if write:
             out = pair_house_path(pair_id, name)

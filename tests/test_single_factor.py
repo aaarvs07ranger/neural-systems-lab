@@ -8,8 +8,9 @@ Run with::
 These run against the real committed houses, offline -- no ProcTHOR dataset and
 no Unity. What they pin:
 
-  * the six factors RECOMPOSE into the frozen L1, L2 and L3 exactly, so they are
+  * the factors RECOMPOSE into the frozen L1, L2 and L3 exactly, so they are
     complete (nothing the ladder changes is missing) and disjoint;
+  * L2 taken alone (F_objall) equals its two halves (F_obj + F_tgt) exactly;
   * each factor changes only the fields it owns, which is what makes a
     single-change result attributable;
   * the recomposition test can actually FAIL (negative control) -- a self-test
@@ -30,7 +31,7 @@ from envs.generate_variants import (  # noqa: E402
     DISTRACTOR_TAG, _iter_objects, _object_type, assert_structurally_identical,
 )
 from envs.make_single_factor import (  # noqa: E402
-    CHECKPOINTS, FACTORS, ORDER, _apply, build_pair,
+    ALL_FACTORS, CHECKPOINTS, EXTRA, FACTORS, ORDER, _apply, build_pair,
 )
 
 PAIRS = [f"pair{i}" for i in range(GenerationConfig().n_pairs)]
@@ -126,12 +127,29 @@ def test_clutter_factor_only_adds_tagged_objects() -> None:
                 assert o.get("kinematic") is True, f"{pair}: clutter can move"
 
 
+def test_l2_alone_equals_its_two_halves() -> None:
+    """F_objall is the rung taken alone; F_obj and F_tgt split the same change.
+    If they disagree, the attribution split is not a split of that house."""
+    for pair in PAIRS:
+        a, src, tgt = _load(pair, "A"), _sources(pair), _target(pair)
+        both, _ = _apply(a, ("F_obj", "F_tgt"), src, tgt)
+        alone, _ = _apply(a, ("F_objall",), src, tgt)
+        assert both == alone, f"{pair}: F_objall != F_obj + F_tgt"
+        # And it must be the frozen L2 apart from the repaint: same assetIds.
+        l2_assets = {o["id"]: o.get("assetId") for o in _iter_objects(src["L2"]["objects"])}
+        for o in _iter_objects(alone["objects"]):
+            assert o.get("assetId") == l2_assets[o["id"]], f"{pair}: asset differs from L2"
+        # ...while the room itself is untouched.
+        assert alone.get("walls") == a.get("walls")
+        assert alone["proceduralParameters"].get("lights") == a["proceduralParameters"].get("lights")
+
+
 def test_written_houses_match_what_the_builder_reports() -> None:
     """Every file on disk must equal a fresh build, and pass its structural rule."""
     for pair in PAIRS:
         a, src, tgt = _load(pair, "A"), _sources(pair), _target(pair)
         rec = json.loads((pair_dir(pair) / "single_factor.json").read_text())
-        for name in ORDER:
+        for name in ALL_FACTORS:
             path = pair_house_path(pair, name)
             if not rec["factors"][name]["written"]:
                 assert not path.exists(), f"{pair}: {name} reported unwritten but exists"
@@ -139,7 +157,8 @@ def test_written_houses_match_what_the_builder_reports() -> None:
             fresh, _ = _apply(a, (name,), src, tgt)
             assert json.loads(path.read_text()) == fresh, f"{pair}: {name} on disk differs"
             assert fresh != a, f"{pair}: {name} is identical to house A"
-            assert_structurally_identical(a, fresh, level=FACTORS[name][1],
+            spec = FACTORS.get(name) or EXTRA[name]
+            assert_structurally_identical(a, fresh, level=spec[1],
                                           target_object_type=tgt)
 
 
@@ -159,10 +178,10 @@ def test_build_is_deterministic() -> None:
     """No randomness anywhere: rebuilding must reproduce the same bytes."""
     for pair in PAIRS:
         before = {n: pair_house_path(pair, n).read_text()
-                  for n in ORDER if pair_house_path(pair, n).exists()}
+                  for n in ALL_FACTORS if pair_house_path(pair, n).exists()}
         build_pair(pair, write=False)
         after = {n: pair_house_path(pair, n).read_text()
-                 for n in ORDER if pair_house_path(pair, n).exists()}
+                 for n in ALL_FACTORS if pair_house_path(pair, n).exists()}
         assert before == after
 
 
