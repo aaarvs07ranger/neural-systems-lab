@@ -1,0 +1,234 @@
+{
+  "pair": "pair0",
+  "target": "Fridge",
+  "derived_from": "committed a/b_L1/b_L2/b_L3",
+  "recomposition_exact": {
+    "L1": true,
+    "L2": true,
+    "L3": true
+  },
+  "factors": {
+    "F_mat": {
+      "written": true,
+      "description": "wall, floor and ceiling materials",
+      "fields_changed": [
+        "wall|2|0.00|0.00|0.00|3.99.material",
+        "wall|2|0.00|3.99|5.99|3.99.material",
+        "wall|2|5.99|3.99|5.99|5.99.material",
+        "wall|2|5.99|5.99|7.98|5.99.material",
+        "wall|2|7.98|2.00|7.98|5.99.material",
+        "wall|2|5.99|2.00|7.98|2.00.material",
+        "wall|2|5.99|0.00|5.99|2.00.material",
+        "wall|2|0.00|0.00|5.99|0.00.material",
+        "wall|exterior|0.00|0.00|5.99|0.00.material",
+        "wall|exterior|0.00|0.00|0.00|3.99.material",
+        "wall|exterior|0.00|3.99|5.99|3.99.material",
+        "wall|exterior|5.99|5.99|7.98|5.99.material",
+        "wall|exterior|5.99|0.00|5.99|2.00.material",
+        "wall|exterior|5.99|2.00|7.98|2.00.material",
+        "wall|exterior|5.99|3.99|5.99|5.99.material",
+        "wall|exterior|7.98|2.00|7.98|5.99.material",
+        "room|2.floorMaterial",
+        "ceilingMaterial"
+      ]
+    },
+    "F_light": {
+      "written": true,
+      "description": "light colour and intensity",
+      "n_lights": 2,
+      "n_changed": 2
+    },
+    "F_sky": {
+      "written": true,
+      "description": "the sky seen through the windows",
+      "before": "SkyAlbany",
+      "after": "SkyGasworks",
+      "changed": true
+    },
+    "F_obj": {
+      "written": true,
+      "description": "the look of every object except the target",
+      "n_swapped": 22,
+      "swaps": [
+        {
+          "id": "Apple|surface|2|0",
+          "type": "Apple",
+          "before": "Apple_24",
+          "after": "Apple_10"
+        },
+        {
+          "id": "Egg|surface|2|1",
+          "type": "Egg",
+          "before": "Egg_23",
+          "after": "Egg_18"
+        },
+        {
+          "id": "SprayBottle|surface|2|2",
+          "type": "SprayBottle",
+          "before": "Spray_Bottle_8",
+          "after": "Spray_Bottle_7"
+        },
+        {
+          "id": "Lettuce|surface|2|3",
+          "type": "Lettuce",
+          "before": "Lettuce_19",
+          "after": "Lettuce_10"
+        },
+        {
+          "id": "SaltShaker|surface|2|4",
+          "type": "SaltShaker",
+          "before": "RoboTHOR_salt_pepper_shaker_bnyd_salt_v",
+          "after": "Salt_Shaker_2"
+        },
+        {
+          "id": "Tomato|surface|2|7",
+          "type": "Tomato",
+          "before": "Tomato_5",
+          "after": "Tomato_14"
+        },
+        {
+          "id": "Potato|surface|2|9",
+          "type": "Potato",
+          "before": "Potato_6",
+          "after": "Potato_18"
+        },
+        {
+          "id": "Bowl|surface|2|11",
+          "type": "Bowl",
+          "before": "Bowl_22",
+          "after": "Bowl_18"
+        },
+        {
+          "id": "Pencil|surface|2|13",
+          "type": "Pencil",
+          "before": "Pencil_3",
+          "after": "Pencil_7"
+        },
+        {
+          "id": "SoapBottle|surface|2|14",
+          "type": "SoapBottle",
+          "before": "Soap_Bottle_3",
+          "after": "Soap_Bottle_11"
+        },
+        {
+          "id": "Plate|surface|2|15",
+          "type": "Plate",
+          "before": "Plate_11",
+          "after": "Plate_2"
+        },
+        {
+          "id": "Ladle|surface|2|16",
+          "type": "Ladle",
+          "before": "Ladle_1",
+          "after": "Ladle_2"
+        },
+        {
+          "id": "Fork|surface|2|17",
+          "type": "Fork",
+          "before": "Fork_1",
+          "after": "RoboTHOR_fork_ai2_v"
+        },
+        {
+          "id": "Lettuce|surface|2|10",
+          "type": "Lettuce",
+          "before": "Lettuce_7",
+          "after": "Lettuce_15"
+        },
+        {
+          "id": "Potato|surface|2|12",
+          "type": "Potato",
+          "before": "Potato_2",
+          "after": "Potato_14"
+        },
+        {
+          "id": "HousePlant|2|2|0",
+          "type": "HousePlant",
+          "before": "Houseplant_11",
+          "after": "Houseplant_15"
+        },
+        {
+          "id": "GarbageCan|2|3",
+          "type": "GarbageCan",
+          "before": "bin_25",
+          "after": "bin_18"
+        },
+        {
+          "id": "GarbageBag|2|4",
+          "type": "GarbageBag",
+          "before": "GarbageBag_21_2",
+          "after": "GarbageBag_21_1"
+        },
+        {
+          "id": "Painting|2|5",
+          "type": "Painting",
+          "before": "Wall_Decor_Photo_1V",
+          "after": "Wall_Decor_Painting_10"
+        },
+        {
+          "id": "Painting|2|6",
+          "type": "Painting",
+          "before": "Wall_Decor_Photo_2",
+          "after": "Wall_Decor_Painting_1V"
+        },
+        {
+          "id": "Painting|2|7",
+          "type": "Painting",
+          "before": "Wall_Decor_Painting_3V",
+          "after": "Wall_Decor_Painting_10"
+        },
+        {
+          "id": "Painting|2|8",
+          "type": "Painting",
+          "before": "Wall_Decor_Photo_6",
+          "after": "Wall_Decor_Painting_10"
+        }
+      ]
+    },
+    "F_tgt": {
+      "written": true,
+      "description": "the look of the target only",
+      "n_swapped": 1,
+      "swaps": [
+        {
+          "id": "Fridge|2|1",
+          "type": "Fridge",
+          "before": "Fridge_19",
+          "after": "Fridge_29"
+        }
+      ]
+    },
+    "F_clut": {
+      "written": true,
+      "description": "added clutter",
+      "n_added": 4,
+      "distractors": [
+        {
+          "id": "DeskLamp|distractor|0",
+          "host": "CounterTop|2|0",
+          "asset": "RoboTHOR_desk_lamp_arstid_v"
+        },
+        {
+          "id": "BaseballBat|distractor|1",
+          "host": "CounterTop|2|0",
+          "asset": "BaseballBat_1"
+        },
+        {
+          "id": "Candle|distractor|2",
+          "host": "CounterTop|2|0",
+          "asset": "RoboTHOR_candle_glittrig_3_v"
+        },
+        {
+          "id": "Mug|distractor|3",
+          "host": "CounterTop|2|0",
+          "asset": "Mug_3"
+        }
+      ]
+    },
+    "F_objall": {
+      "written": true,
+      "description": "the look of every object, target included (L2's change without L1)",
+      "n_swapped": 23
+    }
+  },
+  "objall_equals_obj_plus_tgt": true
+}

@@ -1,0 +1,138 @@
+{
+  "pair": "pair1",
+  "target": "Bed",
+  "derived_from": "committed a/b_L1/b_L2/b_L3",
+  "recomposition_exact": {
+    "L1": true,
+    "L2": true,
+    "L3": true
+  },
+  "factors": {
+    "F_mat": {
+      "written": true,
+      "description": "wall, floor and ceiling materials",
+      "fields_changed": [
+        "wall|2|0.00|0.00|3.24|0.00.material",
+        "wall|2|0.00|0.00|0.00|4.86.material",
+        "wall|2|0.00|4.86|3.24|4.86.material",
+        "wall|2|3.24|0.00|3.24|4.86.material",
+        "wall|exterior|3.24|0.00|3.24|4.86.material",
+        "wall|exterior|0.00|4.86|3.24|4.86.material",
+        "wall|exterior|0.00|0.00|0.00|4.86.material",
+        "wall|exterior|0.00|0.00|3.24|0.00.material",
+        "room|2.floorMaterial",
+        "ceilingMaterial"
+      ]
+    },
+    "F_light": {
+      "written": true,
+      "description": "light colour and intensity",
+      "n_lights": 2,
+      "n_changed": 2
+    },
+    "F_sky": {
+      "written": true,
+      "description": "the sky seen through the windows",
+      "before": "SkyEmeryville",
+      "after": "SkySeaStacks",
+      "changed": true
+    },
+    "F_obj": {
+      "written": true,
+      "description": "the look of every object except the target",
+      "n_swapped": 9,
+      "swaps": [
+        {
+          "id": "BasketBall|surface|2|1",
+          "type": "BasketBall",
+          "before": "RoboTHOR_basketball_rhode_island_novelty_v",
+          "after": "Basketball_1"
+        },
+        {
+          "id": "TennisRacket|surface|2|2",
+          "type": "TennisRacket",
+          "before": "Tennis_Racquet_3",
+          "after": "Tennis_Racquet_4"
+        },
+        {
+          "id": "Pillow|surface|2|4",
+          "type": "Pillow",
+          "before": "pillow_3",
+          "after": "RoboTHOR_pillow_sanglarka_1_v"
+        },
+        {
+          "id": "AlarmClock|surface|2|0",
+          "type": "AlarmClock",
+          "before": "Alarm_Clock_2",
+          "after": "Alarm_Clock_18"
+        },
+        {
+          "id": "Pencil|surface|2|3",
+          "type": "Pencil",
+          "before": "RoboTHOR_pencil_amazon_basics_v",
+          "after": "Pencil_7"
+        },
+        {
+          "id": "HousePlant|2|2|0",
+          "type": "HousePlant",
+          "before": "Houseplant_18",
+          "after": "Houseplant_10"
+        },
+        {
+          "id": "GarbageCan|2|3",
+          "type": "GarbageCan",
+          "before": "bin_26",
+          "after": "bin_17"
+        },
+        {
+          "id": "Painting|2|4",
+          "type": "Painting",
+          "before": "Wall_Decor_Painting_6",
+          "after": "Wall_Decor_Painting_7"
+        },
+        {
+          "id": "Painting|2|5",
+          "type": "Painting",
+          "before": "Wall_Decor_Photo_6",
+          "after": "Wall_Decor_Painting_3"
+        }
+      ]
+    },
+    "F_tgt": {
+      "written": true,
+      "description": "the look of the target only",
+      "n_swapped": 1,
+      "swaps": [
+        {
+          "id": "Bed|2|0",
+          "type": "Bed",
+          "before": "Bed_20",
+          "after": "Bed_3"
+        }
+      ]
+    },
+    "F_clut": {
+      "written": true,
+      "description": "added clutter",
+      "n_added": 2,
+      "distractors": [
+        {
+          "id": "DeskLamp|distractor|0",
+          "host": "Dresser|2|1",
+          "asset": "Desk_Lamp_2"
+        },
+        {
+          "id": "Pan|distractor|1",
+          "host": "Dresser|2|1",
+          "asset": "Pan_14"
+        }
+      ]
+    },
+    "F_objall": {
+      "written": true,
+      "description": "the look of every object, target included (L2's change without L1)",
+      "n_swapped": 10
+    }
+  },
+  "objall_equals_obj_plus_tgt": true
+}

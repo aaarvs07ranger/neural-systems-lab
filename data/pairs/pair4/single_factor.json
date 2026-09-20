@@ -1,0 +1,311 @@
+{
+  "pair": "pair4",
+  "target": "Television",
+  "derived_from": "committed a/b_L1/b_L2/b_L3",
+  "recomposition_exact": {
+    "L1": true,
+    "L2": true,
+    "L3": true
+  },
+  "factors": {
+    "F_mat": {
+      "written": true,
+      "description": "wall, floor and ceiling materials",
+      "fields_changed": [
+        "wall|2|3.75|1.87|3.75|9.37.material",
+        "wall|2|3.75|9.37|7.49|9.37.material",
+        "wall|2|7.49|1.87|7.49|9.37.material",
+        "wall|2|3.75|1.87|7.49|1.87.material",
+        "wall|3|1.87|0.00|1.87|1.87.material",
+        "wall|3|0.00|0.00|1.87|0.00.material",
+        "wall|3|0.00|0.00|0.00|9.37.material",
+        "wall|3|0.00|9.37|3.75|9.37.material",
+        "wall|3|3.75|1.87|3.75|9.37.material",
+        "wall|3|1.87|1.87|3.75|1.87.material",
+        "wall|exterior|1.87|1.87|3.75|1.87.material",
+        "wall|exterior|0.00|0.00|1.87|0.00.material",
+        "wall|exterior|0.00|9.37|3.75|9.37.material",
+        "wall|exterior|1.87|0.00|1.87|1.87.material",
+        "wall|exterior|0.00|0.00|0.00|9.37.material",
+        "wall|exterior|7.49|1.87|7.49|9.37.material",
+        "wall|exterior|3.75|9.37|7.49|9.37.material",
+        "wall|exterior|3.75|1.87|7.49|1.87.material",
+        "room|2.floorMaterial",
+        "room|3.floorMaterial",
+        "ceilingMaterial"
+      ]
+    },
+    "F_light": {
+      "written": true,
+      "description": "light colour and intensity",
+      "n_lights": 3,
+      "n_changed": 3
+    },
+    "F_sky": {
+      "written": true,
+      "description": "the sky seen through the windows",
+      "before": "SkyMountain",
+      "after": "SkySeaStacks",
+      "changed": true
+    },
+    "F_obj": {
+      "written": true,
+      "description": "the look of every object except the target",
+      "n_swapped": 31,
+      "swaps": [
+        {
+          "id": "Bowl|surface|2|0",
+          "type": "Bowl",
+          "before": "Bowl_27",
+          "after": "Bowl_14"
+        },
+        {
+          "id": "Microwave|surface|2|1",
+          "type": "Microwave",
+          "before": "Microwave_22",
+          "after": "Microwave_19"
+        },
+        {
+          "id": "Ladle|surface|2|2",
+          "type": "Ladle",
+          "before": "Ladle_1",
+          "after": "Ladle_2"
+        },
+        {
+          "id": "CreditCard|surface|2|4",
+          "type": "CreditCard",
+          "before": "CreditCard_4",
+          "after": "CreditCard_3"
+        },
+        {
+          "id": "HousePlant|surface|2|6",
+          "type": "HousePlant",
+          "before": "Houseplant_24",
+          "after": "Houseplant_14"
+        },
+        {
+          "id": "Statue|surface|2|7",
+          "type": "Statue",
+          "before": "Fertility_Statue_2",
+          "after": "Stone_Statue_3"
+        },
+        {
+          "id": "Pen|surface|2|8",
+          "type": "Pen",
+          "before": "Pen_2",
+          "after": "RoboTHOR_pen_signo_v"
+        },
+        {
+          "id": "PepperShaker|surface|2|9",
+          "type": "PepperShaker",
+          "before": "Pepper_Shaker_2",
+          "after": "RoboTHOR_salt_pepper_shaker_bnyd_pepper_v"
+        },
+        {
+          "id": "Potato|surface|2|10",
+          "type": "Potato",
+          "before": "Potato_3",
+          "after": "Potato_18"
+        },
+        {
+          "id": "Pot|surface|2|11",
+          "type": "Pot",
+          "before": "Pot_27",
+          "after": "Pot_18"
+        },
+        {
+          "id": "Mug|surface|2|14",
+          "type": "Mug",
+          "before": "Mug_1",
+          "after": "Mug_2"
+        },
+        {
+          "id": "Fridge|2|1",
+          "type": "Fridge",
+          "before": "Fridge_5",
+          "after": "Fridge_15"
+        },
+        {
+          "id": "Tomato|surface|2|5",
+          "type": "Tomato",
+          "before": "Tomato_9",
+          "after": "Tomato_11"
+        },
+        {
+          "id": "Egg|surface|2|12",
+          "type": "Egg",
+          "before": "Egg_21",
+          "after": "Egg_10"
+        },
+        {
+          "id": "Egg|surface|2|13",
+          "type": "Egg",
+          "before": "Egg_14",
+          "after": "Egg_11"
+        },
+        {
+          "id": "GarbageBag|2|2",
+          "type": "GarbageBag",
+          "before": "GarbageBag_21_2",
+          "after": "GarbageBag_21_1"
+        },
+        {
+          "id": "TVStand|3|0|0",
+          "type": "TVStand",
+          "before": "TV_Stand_222_1",
+          "after": "TV_Stand_211_1"
+        },
+        {
+          "id": "Pencil|surface|3|15",
+          "type": "Pencil",
+          "before": "RoboTHOR_pencil_amazon_basics_v",
+          "after": "Pencil_4"
+        },
+        {
+          "id": "Candle|surface|3|19",
+          "type": "Candle",
+          "before": "RoboTHOR_candle_glittrig_3_v",
+          "after": "RoboTHOR_candle_glittrig_1_v"
+        },
+        {
+          "id": "Pillow|surface|3|21",
+          "type": "Pillow",
+          "before": "pillow_28",
+          "after": "pillow_12"
+        },
+        {
+          "id": "Watch|surface|3|16",
+          "type": "Watch",
+          "before": "Watch_2",
+          "after": "Watch_1"
+        },
+        {
+          "id": "Pencil|surface|3|17",
+          "type": "Pencil",
+          "before": "Pencil_3",
+          "after": "Pencil_5"
+        },
+        {
+          "id": "Statue|surface|3|18",
+          "type": "Statue",
+          "before": "Fertility_Statue_3",
+          "after": "Stone_Statue_1"
+        },
+        {
+          "id": "Book|surface|3|20",
+          "type": "Book",
+          "before": "Book_20",
+          "after": "Book_14"
+        },
+        {
+          "id": "RemoteControl|surface|3|22",
+          "type": "RemoteControl",
+          "before": "Remote_1",
+          "after": "Remote_2"
+        },
+        {
+          "id": "ArmChair|3|2|0",
+          "type": "ArmChair",
+          "before": "RoboTHOR_armchair_overallt",
+          "after": "Armchair_201_3"
+        },
+        {
+          "id": "FloorLamp|3|2|1",
+          "type": "FloorLamp",
+          "before": "Floor_Lamp_18",
+          "after": "Floor_Lamp_10"
+        },
+        {
+          "id": "Painting|3|3",
+          "type": "Painting",
+          "before": "Wall_Decor_Painting_6",
+          "after": "Wall_Decor_Painting_7"
+        },
+        {
+          "id": "Painting|3|4",
+          "type": "Painting",
+          "before": "Wall_Decor_Photo_1V",
+          "after": "Wall_Decor_Painting_6"
+        },
+        {
+          "id": "Painting|3|5",
+          "type": "Painting",
+          "before": "Wall_Decor_Photo_6",
+          "after": "Wall_Decor_Painting_6"
+        },
+        {
+          "id": "Painting|3|6",
+          "type": "Painting",
+          "before": "Wall_Decor_Painting_3V",
+          "after": "Wall_Decor_Painting_7"
+        }
+      ]
+    },
+    "F_tgt": {
+      "written": true,
+      "description": "the look of the target only",
+      "n_swapped": 1,
+      "swaps": [
+        {
+          "id": "Television|3|0|2",
+          "type": "Television",
+          "before": "Television_14",
+          "after": "Television_3"
+        }
+      ]
+    },
+    "F_clut": {
+      "written": true,
+      "description": "added clutter",
+      "n_added": 8,
+      "distractors": [
+        {
+          "id": "Bottle|distractor|2",
+          "host": "CounterTop|2|0",
+          "asset": "Bottle_1"
+        },
+        {
+          "id": "TennisRacket|distractor|6",
+          "host": "CounterTop|2|0",
+          "asset": "Tennis_Racquet_1"
+        },
+        {
+          "id": "ButterKnife|distractor|7",
+          "host": "CounterTop|2|0",
+          "asset": "ButterKnife_1"
+        },
+        {
+          "id": "CD|distractor|0",
+          "host": "Fridge|2|1",
+          "asset": "CD_1"
+        },
+        {
+          "id": "Newspaper|distractor|5",
+          "host": "TVStand|3|0|0",
+          "asset": "Newspaper_2"
+        },
+        {
+          "id": "Spatula|distractor|1",
+          "host": "Sofa|3|0|1",
+          "asset": "Spatula_1"
+        },
+        {
+          "id": "Plate|distractor|3",
+          "host": "DiningTable|3|1",
+          "asset": "Plate_27"
+        },
+        {
+          "id": "TeddyBear|distractor|4",
+          "host": "DiningTable|3|1",
+          "asset": "Teddy_Bear_2"
+        }
+      ]
+    },
+    "F_objall": {
+      "written": true,
+      "description": "the look of every object, target included (L2's change without L1)",
+      "n_swapped": 32
+    }
+  },
+  "objall_equals_obj_plus_tgt": true
+}
