@@ -12,12 +12,13 @@ One trained agent per row of the underlying data; the effect is the mean paired 
 
 | agent | success in `F_light` | success in `F_mat` | difference | signs +/0/− | p | p (Holm) | SPL p (Holm) |
 |---|---|---|---|---|---|---|---|
-| PPO | 0.933 | 0.590 | +0.342 | 20/4/1 | <0.0001 | **0.0002** | <0.0001 |
-| PPO + aug | 0.930 | 0.590 | +0.339 | 24/0/1 | <0.0001 | **<0.0001** | <0.0001 |
-| PPO + JEPA | 0.896 | 0.526 | +0.370 | 21/3/1 | <0.0001 | **<0.0001** | <0.0001 |
-| PPO + MAE | 0.835 | 0.472 | +0.363 | 24/0/1 | <0.0001 | **<0.0001** | <0.0001 |
-| TD-MPC2 | 0.963 | 0.752 | +0.211 | 20/5/0 | <0.0001 | **<0.0001** | <0.0001 |
-| DreamerV3 | 0.794 | 0.680 | +0.114 | 12/7/6 | 0.122 | **1.000** | 0.572 |
+| PPO | 0.933 | 0.590 | +0.342 | 20/4/1 | <0.0001 | **0.0002** | 0.0001 |
+| PPO + aug | 0.930 | 0.590 | +0.339 | 24/0/1 | <0.0001 | **<0.0001** | 0.0001 |
+| PPO + JEPA | 0.896 | 0.526 | +0.370 | 21/3/1 | <0.0001 | **<0.0001** | 0.0001 |
+| PPO+MAE | 0.835 | 0.472 | +0.363 | 24/0/1 | <0.0001 | **<0.0001** | 0.0001 |
+| PPO+DINOv2 | 0.914 | 0.720 | +0.194 | 22/2/1 | <0.0001 | **0.0003** | 0.0008 |
+| TD-MPC2 | 0.963 | 0.752 | +0.211 | 20/5/0 | <0.0001 | **<0.0001** | 0.0001 |
+| DreamerV3 | 0.794 | 0.680 | +0.114 | 12/7/6 | 0.122 | **1.000** | 0.699 |
 
 ### Is changing the target's look worse than changing every other object's?
 
@@ -25,12 +26,13 @@ One trained agent per row of the underlying data; the effect is the mean paired 
 
 | agent | success in `F_obj` | success in `F_tgt` | difference | signs +/0/− | p | p (Holm) | SPL p (Holm) |
 |---|---|---|---|---|---|---|---|
-| PPO | 0.862 | 0.578 | +0.284 | 14/0/6 | 0.006 | **0.076** | 0.088 |
-| PPO + aug | 0.878 | 0.778 | +0.100 | 11/1/8 | 0.079 | **0.868** | 0.419 |
+| PPO | 0.862 | 0.578 | +0.284 | 14/0/6 | 0.006 | **0.087** | 0.103 |
+| PPO + aug | 0.878 | 0.778 | +0.100 | 11/1/8 | 0.079 | **1.000** | 0.503 |
 | PPO + JEPA | 0.814 | 0.822 | -0.008 | 5/5/10 | 0.844 | **1.000** | 1.000 |
-| PPO + MAE | 0.884 | 0.868 | +0.016 | 6/2/12 | 0.641 | **1.000** | 1.000 |
+| PPO+MAE | 0.884 | 0.868 | +0.016 | 6/2/12 | 0.641 | **1.000** | 1.000 |
+| PPO+DINOv2 | 0.882 | 0.898 | -0.016 | 4/5/11 | 0.530 | **1.000** | 1.000 |
 | TD-MPC2 | 0.972 | 0.980 | -0.008 | 4/8/8 | 0.549 | **1.000** | 1.000 |
-| DreamerV3 | 0.758 | 0.876 | -0.118 | 1/9/10 | 0.006 | **0.076** | 0.024 |
+| DreamerV3 | 0.758 | 0.876 | -0.118 | 1/9/10 | 0.006 | **0.087** | 0.027 |
 
 ### Does adding clutter cost anything at all?
 
@@ -38,12 +40,13 @@ One trained agent per row of the underlying data; the effect is the mean paired 
 
 | agent | success in `A` | success in `F_clut` | difference | signs +/0/− | p | p (Holm) | SPL p (Holm) |
 |---|---|---|---|---|---|---|---|
-| PPO | 0.936 | 0.928 | +0.008 | 4/21/0 | 0.125 | **1.000** | 0.171 |
+| PPO | 0.936 | 0.928 | +0.008 | 4/21/0 | 0.125 | **1.000** | 0.202 |
 | PPO + aug | 0.934 | 0.930 | +0.005 | 3/20/2 | 0.688 | **1.000** | 1.000 |
 | PPO + JEPA | 0.894 | 0.896 | -0.002 | 4/16/5 | 1.000 | **1.000** | 1.000 |
-| PPO + MAE | 0.920 | 0.920 | +0.000 | 2/21/2 | 1.000 | **1.000** | 1.000 |
+| PPO+MAE | 0.920 | 0.920 | +0.000 | 2/21/2 | 1.000 | **1.000** | 1.000 |
+| PPO+DINOv2 | 0.923 | 0.920 | +0.003 | 4/19/2 | 0.688 | **1.000** | 1.000 |
 | TD-MPC2 | 0.989 | 0.989 | +0.000 | 2/20/3 | 1.000 | **1.000** | 1.000 |
-| DreamerV3 | 0.760 | 0.778 | -0.018 | 3/15/7 | 0.141 | **1.000** | 0.933 |
+| DreamerV3 | 0.760 | 0.778 | -0.018 | 3/15/7 | 0.141 | **1.000** | 1.000 |
 
 ## Family 2 — who is robust to what (between agents)
 
@@ -52,11 +55,24 @@ Share of house-A success lost, runs with house-A success ≥ 0.5. Stratified per
 | change | agent A | agent B | A loses | B loses | gap (pts) | runs | p | p (Holm) |
 |---|---|---|---|---|---|---|---|---|
 | `F_mat` | PPO | PPO + JEPA | 37% | 43% | -6.3 | 25/25 | 0.393 | **0.393** |
-| `F_mat` | PPO | PPO + MAE | 37% | 50% | -13.1 | 25/25 | 0.119 | **0.238** |
+| `F_mat` | PPO | PPO+MAE | 37% | 50% | -13.1 | 25/25 | 0.119 | **0.238** |
 | `F_mat` | PPO | TD-MPC2 | 37% | 24% | +12.4 | 25/25 | 0.026 | **0.077** |
 | `F_tgt` | PPO | PPO + JEPA | 39% | 6% | +32.3 | 20/20 | <0.0001 | **0.0002** |
-| `F_tgt` | PPO | PPO + MAE | 39% | 6% | +32.8 | 20/20 | 0.0001 | **0.0004** |
+| `F_tgt` | PPO | PPO+MAE | 39% | 6% | +32.8 | 20/20 | 0.0001 | **0.0004** |
 | `F_tgt` | PPO | TD-MPC2 | 39% | 1% | +38.1 | 20/20 | <0.0001 | **<0.0001** |
+
+## Family 3 — does the strongest frozen encoder survive a repaint?
+
+DINOv2 against each other agent on `F_mat`, the change Family 1 identifies as the damaging one. Fixed 2026-09-21, after DINOv2's ladder means had been seen but before any single-change number for it existed; corrected separately from Family 2 so neither borrows strength from the other.
+
+| agent | that agent loses | DINOv2 loses | gap (pts) | runs | p | p (Holm) |
+|---|---|---|---|---|---|---|
+| PPO | 37% | 22% | +14.5 | 25/25 | 0.017 | **0.069** |
+| PPO + aug | 36% | 22% | +14.0 | 25/25 | 0.037 | **0.111** |
+| PPO + JEPA | 43% | 22% | +20.8 | 25/25 | 0.002 | **0.010** |
+| PPO+MAE | 50% | 22% | +27.6 | 25/25 | 0.0002 | **0.0009** |
+| TD-MPC2 | 24% | 22% | +2.1 | 25/25 | 0.692 | **1.000** |
+| DreamerV3 | 20% | 22% | -2.1 | 20/25 | 0.762 | **1.000** |
 
 ## Negative control
 
@@ -67,6 +83,7 @@ pair2's target has no footprint-safe alternative, so its `F_obj` and `F_objall` 
 | PPO | +0.000 | 5 | 1.000 |
 | PPO + aug | +0.000 | 5 | 1.000 |
 | PPO + JEPA | +0.000 | 5 | 1.000 |
-| PPO + MAE | +0.000 | 5 | 1.000 |
+| PPO+MAE | +0.000 | 5 | 1.000 |
+| PPO+DINOv2 | +0.000 | 5 | 1.000 |
 | TD-MPC2 | +0.000 | 5 | 1.000 |
 | DreamerV3 | +0.016 | 5 | 0.500 |

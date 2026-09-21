@@ -89,7 +89,24 @@ RUNG_DESC = {
     "L2noT": "L1 + every object's appearance changed EXCEPT the target",
     "L2": "L1 + every object's appearance changed, target included when swappable",
     "L3": "L2 + {clutter} distractor objects",
+    # Single-change houses: house A with exactly ONE thing different, derived
+    # byte-identically from the frozen stacked house that made that change.
+    "F_mat": "ONLY wall/floor/ceiling materials changed (no lighting, no objects)",
+    "F_light": "ONLY light colour and intensity changed",
+    "F_sky": "ONLY the skybox changed",
+    "F_obj": "ONLY object appearance changed, target excluded (no repaint)",
+    "F_tgt": "ONLY the target's appearance changed",
+    "F_objall": "ONLY object appearance changed, target included (no repaint)",
+    "F_clut": "ONLY {clutter} distractor objects added",
 }
+# The rungs the factor pass walked, in the order it evaluated them.
+FACTOR_RUNGS = ("F_objall", "F_clut", "F_obj", "F_tgt", "F_mat", "F_light",
+                "F_sky", "L1", "L2noT", "L2", "L3")
+# (job, repo state at submission) for the evaluation-only factor sweep.
+FACTOR_JOBS = {"ppo": ("40345981", "89a6cb6"), "ppo_aug": ("40345982", "89a6cb6"),
+               "ppo_jepa": ("40345983", "89a6cb6"), "ppo_mae": ("40345984", "89a6cb6"),
+               "dreamerv3": ("40345985", "89a6cb6"), "tdmpc2": ("40345986", "89a6cb6"),
+               "ppo_dino": ("40386083", "d3ada1a")}
 BASE_RECIPE = {
     "ppo": "SB3 PPO defaults",
     "ppo_aug": "SB3 PPO defaults + photometric jitter (training only)",
@@ -397,6 +414,55 @@ def ingest_ladder(df: pd.DataFrame, budget: int) -> pd.DataFrame:
     return df
 
 
+def ingest_factors(df: pd.DataFrame) -> pd.DataFrame:
+    """The single-change pass: one row per (agent, cell, rung) in results/factor_300000.
+
+    A SEPARATE COHORT, not extra rows on the grid cohort, for two reasons. The
+    houses are different houses -- each changes one thing where the ladder rung
+    changes several. And the cumulative rungs in this tree are a SECOND
+    measurement of the same checkpoints, taken weeks later in one pass; keeping
+    them apart is what lets the parts-versus-whole comparison stay within a
+    single evaluation while the committed grid stays the headline.
+
+    No training happened here: every cell reuses a model the grid trained, which
+    is why the recipe records the training budget but the job is an eval job.
+    """
+    tree = PROJECT_ROOT / "results" / "factor_300000"
+    if not tree.exists():
+        return df
+    cells = sorted(tree.glob("*/*_seed*"))
+    n_agents = len({c.parent.name for c in cells})
+    if len(cells) != 25 * n_agents:
+        raise ValueError(f"results/factor_300000: {len(cells)} cells across "
+                         f"{n_agents} agents is not 25 each")
+    n = 0
+    for cell in cells:
+        baseline = cell.parent.name
+        pair, seed_s = cell.name.split("_seed")
+        seed = int(seed_s)
+        summary = cell / f"{baseline}_transfer_summary.csv"
+        present = set(pd.read_csv(summary)["level"])
+        job, commit = FACTOR_JOBS[baseline]
+        recipe = (f"{BASE_RECIPE[baseline]}; {PROTOCOL_V2}; 300k env steps; "
+                  "EVALUATION ONLY -- the grid's trained model, re-evaluated in "
+                  "the single-change houses")
+        for level in FACTOR_RUNGS:
+            if level not in present:
+                continue          # pair2 has no F_tgt: its target cannot be swapped
+            row = make_row(summary_csv=summary, baseline=baseline, seed=seed,
+                           cohort="factor_300k", date=first_commit_date(summary),
+                           git_commit=commit, slurm_job=job, recipe=recipe,
+                           recipe_tag="v2-300k-factor", train_steps=300_000,
+                           results_path=str(cell.relative_to(PROJECT_ROOT)),
+                           **pair_context(pair, level))
+            row["notes"] = _competency_note(
+                row, "single-change pass: all twelve houses measured for this agent "
+                     "in ONE evaluation")
+            df = upsert(df, row); n += 1
+    print(f"  factor_300k: {n} (agent, rung) rows from {len(cells)} cells")
+    return df
+
+
 def ingest_reruns(df: pd.DataFrame) -> pd.DataFrame:
     """Retrained agents (saved model was gone). Never the headline; all five rungs."""
     n = 0
@@ -444,15 +510,22 @@ def write_houses() -> None:
         d = PROJECT_ROOT / "data" / "pairs" / pair
         ver = json.loads((d / "verification.json").read_text())
         idx = {p["pair_id"]: p for p in json.loads((PROJECT_ROOT / "data" / "pairs_index.json").read_text())["pairs"]}[pair]
-        for level in ("L1", "L2noT", "L2", "L3"):
+        for level in ("L1", "L2noT", "L2", "L3") + FACTOR_RUNGS[:7]:
             v = ver["levels"].get(level)
-            sh = shift[(pair, level)]
+            if v is None and level.startswith("F_"):
+                continue          # pair2 has no F_tgt house at all
+            # Image change was measured for the ladder rungs only (one capture
+            # pass, before the single-change houses existed). Recorded as
+            # missing rather than guessed.
+            sh = shift.get((pair, level), {"mean_abs_diff": "", "frac_pixels_changed": "",
+                                           "hist_l1": ""})
             rows.append(dict(
                 house_pair=pair, shift_level=level, house_index=idx["house_index"],
                 target=idx["target_object_type"],
                 target_swappable=bool(json.loads((d / "safe_assets.json").read_text()).get("target_swappable")),
                 reachable_cells=ver["reference"]["n_reachable"],
-                clutter_kept=json.loads((d / "l3_prune.json").read_text())["n_kept"] if level == "L3" else 0,
+                clutter_kept=(json.loads((d / "l3_prune.json").read_text())["n_kept"]
+                              if level in ("L3", "F_clut") else 0),
                 gate_C1_C3_passed=(v["passed"] if v else "not recorded in verification.json"),
                 max_shortest_path_delta_m=(v["max_shortest_path_delta"] if v else ""),
                 image_mean_pixel_diff=sh["mean_abs_diff"],
@@ -569,6 +642,7 @@ def cmd_rebuild(_: argparse.Namespace) -> None:
     df = ingest_ladder(df, 150_000)
     df = ingest_ladder(df, 300_000)
     df = ingest_reruns(df)
+    df = ingest_factors(df)
     save_runs(df)
     write_houses()
 

@@ -74,9 +74,17 @@ WITHIN = [
     ("clutter_cost", "A", "F_clut", None,
      "Does adding clutter cost anything at all?"),
 ]
-# Family 2: (change, agent a, agent b)
+# Family 2: (change, agent a, agent b). FIXED 2026-09-20, before ppo_dino
+# existed. It is NOT edited to include the seventh agent: silently growing a
+# pre-specified family after seeing a new result is the thing the correction is
+# supposed to prevent.
 BETWEEN = [(rung, "ppo", b) for rung in ("F_mat", "F_tgt")
            for b in ("ppo_jepa", "ppo_mae", "tdmpc2")]
+# Family 3: DINOv2 against each other agent on the one change that matters.
+# Fixed 2026-09-21, after DINOv2's LADDER means had been seen but before any
+# single-change number for it existed. Stated rather than hidden, and corrected
+# separately so it can never borrow strength from Family 2.
+DINO = [("F_mat", a, "ppo_dino") for a in AGENTS if a != "ppo_dino"]
 
 
 # ---------------------------------------------------------------------------- data
@@ -186,7 +194,7 @@ def analyse(data, metric: int) -> dict:
 
     rng = np.random.default_rng(20260920)
     pvals, keys = [], []
-    for rung, a, b in BETWEEN:
+    for rung, a, b in BETWEEN + DINO:
         da, db = lost(a, rung), lost(b, rung)
         houses = sorted(set(da) & set(db))
         da = {h: da[h] for h in houses}
@@ -200,8 +208,11 @@ def analyse(data, metric: int) -> dict:
         }
         pvals.append(p)
         keys.append((rung, a, b))
-    for k, adj in zip(keys, holm(pvals)):
-        res["between"][k]["p_holm"] = adj
+    # Holm WITHIN each declared family, never across the two.
+    for fam in (BETWEEN, DINO):
+        idx = [i for i, k in enumerate(keys) if k in fam]
+        for i, adj in zip(idx, holm([pvals[i] for i in idx])):
+            res["between"][keys[i]]["p_holm"] = adj
 
     # Negative control: pair2 has no target house, so its F_objall IS its F_obj
     # (nothing else can change). Any difference there is evaluation randomness.
@@ -254,6 +265,19 @@ def render(rs: dict, rspl: dict) -> str:
     for rung, a, b in BETWEEN:
         r = rs["between"][(rung, a, b)]
         L.append(f"| `{rung}` | {NICE[a]} | {NICE[b]} | {r['mean_a']:.0f}% | {r['mean_b']:.0f}% | "
+                 f"{r['mean_a'] - r['mean_b']:+.1f} | {r['na']}/{r['nb']} | "
+                 f"{fmt_p(r['p_raw'])} | **{fmt_p(r['p_holm'])}** |")
+
+    L += ["", "## Family 3 — does the strongest frozen encoder survive a repaint?", "",
+          "DINOv2 against each other agent on `F_mat`, the change Family 1 identifies as "
+          "the damaging one. Fixed 2026-09-21, after DINOv2's ladder means had been seen "
+          "but before any single-change number for it existed; corrected separately from "
+          "Family 2 so neither borrows strength from the other.", "",
+          "| agent | that agent loses | DINOv2 loses | gap (pts) | runs | p | p (Holm) |",
+          "|---|---|---|---|---|---|---|"]
+    for rung, a, b in DINO:
+        r = rs["between"][(rung, a, b)]
+        L.append(f"| {NICE[a]} | {r['mean_a']:.0f}% | {r['mean_b']:.0f}% | "
                  f"{r['mean_a'] - r['mean_b']:+.1f} | {r['na']}/{r['nb']} | "
                  f"{fmt_p(r['p_raw'])} | **{fmt_p(r['p_holm'])}** |")
 
@@ -314,7 +338,7 @@ def main() -> None:
             r = rs["within"][(key, agent)]
             print(f"   {NICE[agent]:12s} {r['effect']:+.3f}  Holm p={fmt_p(r['p_holm'])}")
     print("\nBetween agents (share of house-A success lost):")
-    for rung, a, b in BETWEEN:
+    for rung, a, b in BETWEEN + DINO:
         r = rs["between"][(rung, a, b)]
         print(f"   {rung:7s} {NICE[a]} {r['mean_a']:.0f}% vs {NICE[b]} {r['mean_b']:.0f}%  "
               f"gap {r['mean_a'] - r['mean_b']:+.1f} pts  Holm p={fmt_p(r['p_holm'])}")
