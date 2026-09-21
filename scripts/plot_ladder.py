@@ -62,6 +62,13 @@ SERIES = {
     "ppo_aug":   ("#2a78d6", "#3987e5", (5, 2),      "PPO + augmentation"),
     "ppo_jepa":  ("#eb6834", "#d95926", (),          "PPO + JEPA (frozen)"),
     "ppo_mae":   ("#eb6834", "#d95926", (5, 2),      "PPO + MAE (frozen)"),
+    # Seventh agent, added 2026-09-21. It joins the frozen-encoder GROUP rather
+    # than taking a fourth hue: no four-slot subset of the validated palette
+    # clears the all-pairs colour-blindness floors in both modes (all 70 were
+    # checked), and hue already carries the architecture class. A third dash
+    # pattern inside one hue costs nothing, because dash only ever separates
+    # members of a group the legend and direct labels already name.
+    "ppo_dino":  ("#eb6834", "#d95926", (1.5, 1.5), "PPO + DINOv2 (frozen)"),
     "dreamerv3": ("#1baf7a", "#199e70", (),          "DreamerV3"),
     "tdmpc2":    ("#1baf7a", "#199e70", (5, 2),      "TD-MPC2"),
 }

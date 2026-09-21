@@ -38,13 +38,15 @@ from config import GenerationConfig, TABLES_DIR, pair_dir
 
 RUNGS = ["A", "L1", "L2", "L3"]
 SHIFTED = ["L1", "L2", "L3"]
-ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "dreamerv3", "tdmpc2"]
+ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "dreamerv3", "tdmpc2"]
 NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "ppo_jepa": "PPO + JEPA",
-        "ppo_mae": "PPO + MAE", "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2"}
+        "ppo_mae": "PPO + MAE", "ppo_dino": "PPO + DINOv2",
+        "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2"}
 CLASS = {"ppo": "model-free, vision trained here",
          "ppo_aug": "model-free + augmentation",
          "ppo_jepa": "frozen pretrained encoder (predicts representations)",
          "ppo_mae": "frozen pretrained encoder (predicts pixels)",
+         "ppo_dino": "frozen pretrained encoder (self-distillation, LVD-142M)",
          "dreamerv3": "world model (latent must redraw the scene)",
          "tdmpc2": "world model (no decoder)"}
 MIN_A = 0.5

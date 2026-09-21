@@ -9,24 +9,24 @@ with no agent involved. **The unit is the house: 5 independent measurements.**
 
 Damage = share of house-A success lost at L1, averaged over the house's agents (runs with house-A success < 0.5 left out of the ratio).
 
-| house | cells | mean pixel diff | pixels changed | histogram dist | PPO | PPO+aug | PPO+JEPA | PPO+MAE | TD-MPC2 | DreamerV3 | all agents |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| pair0 | 380 | 12.3 | 62% | 0.79 | 31% | 34% | 13% | 8% | 14% | 1% | **17%** |
-| pair4 | 681 | 24.0 | 73% | 0.83 | 58% | 53% | 44% | 96% | 30% | 11% | **49%** |
-| pair2 | 128 | 31.8 | 92% | 1.42 | 6% | 9% | 35% | 67% | 7% | 26% | **25%** |
-| pair3 | 460 | 33.8 | 96% | 1.02 | 95% | 74% | 81% | 72% | 86% | 96% | **84%** |
-| pair1 | 162 | 70.6 | 87% | 1.47 | 33% | 50% | 74% | 72% | 40% | 46% | **53%** |
+| house | cells | mean pixel diff | pixels changed | histogram dist | PPO | PPO+aug | PPO+JEPA | PPO+MAE | PPO+DINOv2 | TD-MPC2 | DreamerV3 | all agents |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| pair0 | 380 | 12.3 | 62% | 0.79 | 31% | 34% | 13% | 8% | 3% | 14% | 1% | **15%** |
+| pair4 | 681 | 24.0 | 73% | 0.83 | 58% | 53% | 44% | 96% | 25% | 30% | 11% | **45%** |
+| pair2 | 128 | 31.8 | 92% | 1.42 | 6% | 9% | 35% | 67% | 15% | 7% | 26% | **24%** |
+| pair3 | 460 | 33.8 | 96% | 1.02 | 95% | 74% | 81% | 72% | 59% | 86% | 96% | **80%** |
+| pair1 | 162 | 70.6 | 87% | 1.47 | 33% | 50% | 74% | 72% | 8% | 40% | 46% | **46%** |
 
 (rows ordered by mean pixel difference)
 
 Rank correlation with damage (Spearman; exact p over all 120 orderings; smallest possible p = 0.017):
 
-| predictor | PPO | PPO+aug | PPO+JEPA | PPO+MAE | TD-MPC2 | DreamerV3 | all agents | p (all agents) |
-|---|---|---|---|---|---|---|---|---|
-| mean pixel difference (0-255) | +0.30 | +0.30 | +0.80 | +0.40 | +0.60 | +0.90 | **+0.80** | 0.133 |
-| share of pixels visibly changed | +0.30 | +0.30 | +0.70 | +0.10 | +0.40 | +0.90 | **+0.70** | 0.233 |
-| colour-histogram distance | -0.10 | -0.10 | +0.50 | +0.30 | +0.20 | +0.70 | **+0.50** | 0.450 |
-| house size (floor cells) | +0.80 | +0.80 | +0.30 | +0.50 | +0.50 | -0.10 | **+0.30** | 0.683 |
+| predictor | PPO | PPO+aug | PPO+JEPA | PPO+MAE | PPO+DINOv2 | TD-MPC2 | DreamerV3 | all agents | p (all agents) |
+|---|---|---|---|---|---|---|---|---|---|
+| mean pixel difference (0-255) | +0.30 | +0.30 | +0.80 | +0.40 | +0.30 | +0.60 | +0.90 | **+0.80** | 0.133 |
+| share of pixels visibly changed | +0.30 | +0.30 | +0.70 | +0.10 | +0.70 | +0.40 | +0.90 | **+0.70** | 0.233 |
+| colour-histogram distance | -0.10 | -0.10 | +0.50 | +0.30 | +0.10 | +0.20 | +0.70 | **+0.50** | 0.450 |
+| house size (floor cells) | +0.80 | +0.80 | +0.30 | +0.50 | +0.50 | +0.50 | -0.10 | **+0.30** | 0.683 |
 
 Check with the same-pass tables instead of the committed grid (differs only for the 7 retrained agents):
 
@@ -43,32 +43,32 @@ Image change added = increase in mean pixel difference from the previous rung. S
 
 **L1->L2noT (other objects' look)**
 
-| house | image change added | PPO | PPO+aug | PPO+JEPA | PPO+MAE | TD-MPC2 | DreamerV3 |
-|---|---|---|---|---|---|---|---|
-| pair0 | +2.1 | +0.04 | +0.06 | +0.14 | -0.02 | +0.05 | +0.00 |
-| pair1 | +2.7 | +0.01 | -0.04 | +0.00 | +0.01 | -0.07 | +0.01 |
-| pair2 | +1.2 | +0.06 | +0.03 | -0.08 | +0.06 | +0.00 | -0.00 |
-| pair3 | +1.3 | +0.00 | +0.03 | -0.02 | +0.00 | +0.03 | -0.02 |
-| pair4 | +4.4 | +0.20 | +0.17 | +0.13 | +0.01 | +0.30 | +0.06 |
+| house | image change added | PPO | PPO+aug | PPO+JEPA | PPO+MAE | PPO+DINOv2 | TD-MPC2 | DreamerV3 |
+|---|---|---|---|---|---|---|---|---|
+| pair0 | +2.1 | +0.04 | +0.06 | +0.14 | -0.02 | +0.08 | +0.05 | +0.00 |
+| pair1 | +2.7 | +0.01 | -0.04 | +0.00 | +0.01 | +0.03 | -0.07 | +0.01 |
+| pair2 | +1.2 | +0.06 | +0.03 | -0.08 | +0.06 | +0.01 | +0.00 | -0.00 |
+| pair3 | +1.3 | +0.00 | +0.03 | -0.02 | +0.00 | +0.06 | +0.03 | -0.02 |
+| pair4 | +4.4 | +0.20 | +0.17 | +0.13 | +0.01 | -0.01 | +0.30 | +0.06 |
 
 **L2noT->L2 (target's look only)**
 
-| house | image change added | PPO | PPO+aug | PPO+JEPA | PPO+MAE | TD-MPC2 | DreamerV3 |
-|---|---|---|---|---|---|---|---|
-| pair0 | +1.0 | +0.47 | +0.36 | +0.09 | +0.18 | +0.22 | +0.02 |
-| pair1 | +1.1 | +0.40 | +0.21 | +0.04 | +0.08 | +0.03 | +0.04 |
-| pair2 | +0.0 | +0.00 | +0.00 | +0.00 | +0.00 | +0.04 | -0.01 |
-| pair3 | +1.2 | +0.01 | +0.01 | +0.08 | +0.11 | -0.03 | -0.07 |
-| pair4 | +0.0 | -0.08 | -0.01 | -0.01 | -0.02 | +0.02 | -0.05 |
+| house | image change added | PPO | PPO+aug | PPO+JEPA | PPO+MAE | PPO+DINOv2 | TD-MPC2 | DreamerV3 |
+|---|---|---|---|---|---|---|---|---|
+| pair0 | +1.0 | +0.47 | +0.36 | +0.09 | +0.18 | +0.05 | +0.22 | +0.02 |
+| pair1 | +1.1 | +0.40 | +0.21 | +0.04 | +0.08 | +0.02 | +0.03 | +0.04 |
+| pair2 | +0.0 | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.04 | -0.01 |
+| pair3 | +1.2 | +0.01 | +0.01 | +0.08 | +0.11 | +0.06 | -0.03 | -0.07 |
+| pair4 | +0.0 | -0.08 | -0.01 | -0.01 | -0.02 | +0.02 | +0.02 | -0.05 |
 
 **L2->L3 (clutter)**
 
-| house | image change added | PPO | PPO+aug | PPO+JEPA | PPO+MAE | TD-MPC2 | DreamerV3 |
-|---|---|---|---|---|---|---|---|
-| pair0 | +0.1 | -0.01 | +0.00 | -0.01 | +0.03 | +0.00 | +0.01 |
-| pair1 | +7.1 | +0.00 | +0.06 | +0.00 | -0.02 | +0.06 | +0.00 |
-| pair2 | +0.0 | +0.00 | +0.00 | +0.00 | -0.01 | +0.02 | +0.02 |
-| pair3 | -0.0 | +0.00 | +0.00 | +0.00 | +0.00 | +0.02 | -0.02 |
-| pair4 | +0.1 | +0.02 | -0.02 | +0.04 | +0.01 | -0.03 | -0.02 |
+| house | image change added | PPO | PPO+aug | PPO+JEPA | PPO+MAE | PPO+DINOv2 | TD-MPC2 | DreamerV3 |
+|---|---|---|---|---|---|---|---|---|
+| pair0 | +0.1 | -0.01 | +0.00 | -0.01 | +0.03 | +0.03 | +0.00 | +0.01 |
+| pair1 | +7.1 | +0.00 | +0.06 | +0.00 | -0.02 | -0.02 | +0.06 | +0.00 |
+| pair2 | +0.0 | +0.00 | +0.00 | +0.00 | -0.01 | -0.02 | +0.02 | +0.02 |
+| pair3 | -0.0 | +0.00 | +0.00 | +0.00 | +0.00 | -0.01 | +0.02 | -0.02 |
+| pair4 | +0.1 | +0.02 | -0.02 | +0.04 | +0.01 | -0.00 | -0.03 | -0.02 |
 
 Positive success lost = the agent did worse after this step.

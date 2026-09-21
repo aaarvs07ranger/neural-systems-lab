@@ -50,8 +50,8 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_mae": "PPO+MAE",
+AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
+NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_mae": "PPO+MAE", "ppo_dino": "PPO+DINOv2",
         "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
 SWAPPABLE = ["pair0", "pair1", "pair3", "pair4"]
 CONTROL = "pair2"

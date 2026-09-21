@@ -66,6 +66,7 @@ ARCH_CLASS = {
     "ppo_aug": "model-free on-policy + photometric augmentation",
     "ppo_jepa": "model-free on-policy + FROZEN I-JEPA encoder (representation-predictive pretraining)",
     "ppo_mae": "model-free on-policy + FROZEN MAE encoder (pixel-predictive pretraining)",
+    "ppo_dino": "model-free on-policy + FROZEN DINOv2 encoder (self-distillation, LVD-142M)",
     "dreamerv3": "reconstruction world model",
     "tdmpc2": "decoder-free latent world model + planner",
 }
@@ -94,6 +95,7 @@ BASE_RECIPE = {
     "ppo_aug": "SB3 PPO defaults + photometric jitter (training only)",
     "ppo_jepa": "SB3 PPO defaults on a frozen I-JEPA ViT-H/14 (facebook/ijepa_vith14_1k, fp16); only the MlpPolicy head trains",
     "ppo_mae": "SB3 PPO defaults on a frozen MAE ViT-H/14 (facebook/vit-mae-huge, fp16, mask_ratio=0); only the MlpPolicy head trains",
+    "ppo_dino": "SB3 PPO defaults on a frozen DINOv2 ViT-g/14 (facebook/dinov2-giant, fp16, 224px centre-crop size); only the MlpPolicy head trains",
     "dreamerv3": "DreamerV3 train_ratio=512",
     "tdmpc2": "TD-MPC2 upstream defaults",
 }
@@ -112,7 +114,9 @@ GRID_JOBS = {
                     "tdmpc2": ("39720498", "ad21a37"),
                     # Added 2026-09-17, after the other four had finished.
                     "ppo_jepa": ("40209743", "8a5b43c"),
-                    "ppo_mae": ("40209748", "8a5b43c")},
+                    "ppo_mae": ("40209748", "8a5b43c"),
+                    # Added 2026-09-21, after the other six.
+                    "ppo_dino": ("40372463", "d3ada1a")},
         ("dreamerv3", "pair1", 0): ("39666403", "b95a196"),
         ("dreamerv3", "pair2", 0): ("39666403", "b95a196"),
         ("dreamerv3", "pair2", 3): ("39666403", "b95a196"),

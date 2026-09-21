@@ -37,8 +37,8 @@ import numpy as np
 import pandas as pd
 
 RUNGS = ["L1", "L2", "L3"]
-ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "dreamerv3", "tdmpc2"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA",
+ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "dreamerv3", "tdmpc2"]
+NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_dino": "PPO+DINOv2",
         "ppo_mae": "PPO+MAE", "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2"}
 
 
@@ -114,18 +114,62 @@ def report(d: pd.DataFrame, draws: int, seed: int, title: str) -> None:
                     print(f"      {label:<7} {rung}: {o:+6.1%}  p={p:.4f}  "
                           f"houses {signs} (n={k}){star}")
 
-    if headline:
-        ps = [h[3] for h in headline]
+    def report_family(title: str, provenance: str, rows) -> None:
+        """Holm-correct WITHIN a declared family and print it with its provenance.
+
+        Which comparisons belong together is a decision, not a fact, and it
+        changes the answer: the same PPO+aug vs TD-MPC2 gap was significant
+        under six comparisons and not under fifteen. So every family is printed
+        with the date it was fixed and whether any of its numbers had been seen
+        first. Nothing here is chosen after the fact for being favourable; the
+        conservative all-pairs family is always reported alongside.
+        """
+        rows = [r for r in rows if r is not None]
+        if not rows:
+            return
+        ps = [r[3] for r in rows]
         order = np.argsort(ps)
         adj, run = [0.0] * len(ps), 0.0
         for rank, idx in enumerate(order):
             run = max(run, min(1.0, (len(ps) - rank) * ps[idx]))
             adj[idx] = run
-        print("\n  HEADLINE FAMILY — success at L2, Holm-corrected over the "
-              f"{len(ps)} pairwise comparisons")
-        for (a, b, o, p), pa in zip(headline, adj):
-            print(f"    {NICE[a]:>9} vs {NICE[b]:<9} {o:+6.1%}  p={p:.4f}  Holm p={pa:.4f}"
+        print(f"\n  {title}  ({len(ps)} comparisons, Holm-corrected within this family)")
+        print(f"    provenance: {provenance}")
+        for (a, b, o, p), pa in zip(rows, adj):
+            print(f"    {NICE[a]:>11} vs {NICE[b]:<11} {o:+6.1%}  p={p:.4f}  Holm p={pa:.4f}"
                   f"{'  significant' if pa < 0.05 else ''}")
+
+    report_family(
+        "ALL-PAIRS FAMILY — success at L2",
+        "every pair of agents present, corrected together. The conservative "
+        "reading, and the one to quote if only one family is reported.",
+        headline)
+
+    # The four agents the benchmark was designed around, whose comparisons were
+    # fixed before any pretrained-encoder agent existed.
+    ORIGINAL = ["ppo", "ppo_aug", "dreamerv3", "tdmpc2"]
+    orig = [h for h in headline if h[0] in ORIGINAL and h[1] in ORIGINAL]
+    report_family(
+        "ORIGINAL-FOUR FAMILY — success at L2",
+        "fixed 2026-09-05, before ppo_jepa, ppo_mae or ppo_dino existed; "
+        "reported because adding agents later must not retroactively weaken a "
+        "test that was specified first.",
+        orig)
+
+    # Does the strongest available frozen encoder help? One agent against each
+    # of the others, at the rung where every agent breaks.
+    dino = []
+    for a in present:
+        if a == "ppo_dino":
+            continue
+        r = stratified_perm(d, a, "ppo_dino", "L1", "drop", draws, rng)
+        if r is not None:
+            dino.append((a, "ppo_dino", r[0], r[1]))
+    report_family(
+        "DINOv2 FAMILY — success at L1",
+        "fixed 2026-09-21, after DINOv2's mean damage had been seen but before "
+        "any p-value was computed. Stated rather than hidden.",
+        dino)
 
 
 def main() -> None:

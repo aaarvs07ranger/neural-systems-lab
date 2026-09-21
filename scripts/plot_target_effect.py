@@ -29,7 +29,7 @@ import numpy as np
 import test_target_effect as tte
 from plot_ladder import INK, SERIES
 
-ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3"]
+ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
 HOUSES = tte.SWAPPABLE + [tte.CONTROL]
 HOUSE_LABEL = {"pair0": "pair0\nFridge", "pair1": "pair1\nBed", "pair3": "pair3\nBed",
                "pair4": "pair4\nTV", "pair2": "pair2\ncontrol"}
@@ -46,8 +46,13 @@ def plot(mode: str) -> Path:
 
     # Two rows of three: six panels in one row would squeeze each house label
     # past legibility at paper width.
-    fig, axes = plt.subplots(2, 3, figsize=(12.5, 6.4), sharey=True, facecolor=surface)
+    # Seven panels on a 2x4 grid; the spare cell is removed rather than left as
+    # an empty frame that reads as a missing agent.
+    fig, axes = plt.subplots(2, 4, figsize=(16.5, 6.4), sharey=True, facecolor=surface)
     axes = axes.ravel()
+    for spare in axes[len(ORDER):]:
+        spare.remove()
+    axes = axes[:len(ORDER)]
     x = np.arange(len(HOUSES), dtype=float)
     x[-1] += 0.6                                    # gap before the control
     jitter = np.linspace(-0.16, 0.16, 5)

@@ -56,9 +56,9 @@ from config import TABLES_DIR  # noqa: E402
 from test_target_effect import holm, stratified_perm  # noqa: E402
 
 GRID = "factor_300000"
-AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3"]
+AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
 NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "ppo_jepa": "PPO + JEPA",
-        "ppo_mae": "PPO + MAE", "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
+        "ppo_mae": "PPO+MAE", "ppo_dino": "PPO+DINOv2", "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
 SWAPPABLE = ["pair0", "pair1", "pair3", "pair4"]
 CONTROL = "pair2"
 MIN_A = 0.5

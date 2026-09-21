@@ -67,13 +67,23 @@ ALL RUNS (DreamerV3 relative drops here are distorted by runs that never learned
       SPL     L2: -51.9%  p=0.0000  houses ----- (n=5) ***
       SPL     L3: -56.3%  p=0.0000  houses ----- (n=5) ***
 
-  HEADLINE FAMILY — success at L2, Holm-corrected over the 6 pairwise comparisons
-          PPO vs PPO+aug   +24.4%  p=0.0000  Holm p=0.0001  significant
-          PPO vs DreamerV3 +72.9%  p=0.0000  Holm p=0.0001  significant
-          PPO vs TD-MPC2   +26.0%  p=0.0000  Holm p=0.0001  significant
-      PPO+aug vs DreamerV3 +48.5%  p=0.0007  Holm p=0.0021  significant
-      PPO+aug vs TD-MPC2    +1.6%  p=0.7876  Holm p=0.7876
-    DreamerV3 vs TD-MPC2   -46.9%  p=0.0007  Holm p=0.0021  significant
+  ALL-PAIRS FAMILY — success at L2  (6 comparisons, Holm-corrected within this family)
+    provenance: every pair of agents present, corrected together. The conservative reading, and the one to quote if only one family is reported.
+            PPO vs PPO+aug     +24.4%  p=0.0000  Holm p=0.0001  significant
+            PPO vs DreamerV3   +72.9%  p=0.0000  Holm p=0.0001  significant
+            PPO vs TD-MPC2     +26.0%  p=0.0000  Holm p=0.0001  significant
+        PPO+aug vs DreamerV3   +48.5%  p=0.0007  Holm p=0.0021  significant
+        PPO+aug vs TD-MPC2      +1.6%  p=0.7876  Holm p=0.7876
+      DreamerV3 vs TD-MPC2     -46.9%  p=0.0007  Holm p=0.0021  significant
+
+  ORIGINAL-FOUR FAMILY — success at L2  (6 comparisons, Holm-corrected within this family)
+    provenance: fixed 2026-09-05, before ppo_jepa, ppo_mae or ppo_dino existed; reported because adding agents later must not retroactively weaken a test that was specified first.
+            PPO vs PPO+aug     +24.4%  p=0.0000  Holm p=0.0001  significant
+            PPO vs DreamerV3   +72.9%  p=0.0000  Holm p=0.0001  significant
+            PPO vs TD-MPC2     +26.0%  p=0.0000  Holm p=0.0001  significant
+        PPO+aug vs DreamerV3   +48.5%  p=0.0007  Holm p=0.0021  significant
+        PPO+aug vs TD-MPC2      +1.6%  p=0.7876  Holm p=0.7876
+      DreamerV3 vs TD-MPC2     -46.9%  p=0.0007  Holm p=0.0021  significant
 
   10 run(s) below house-A success 0.5: {DreamerV3: 8, PPO+aug: 2}
 
@@ -140,13 +150,23 @@ RUNS WITH HOUSE-A SUCCESS >= 0.5 (the set used for comparisons between agents)
       SPL     L2: -22.5%  p=0.0048  houses ---+- (n=5) ***
       SPL     L3: -26.0%  p=0.0002  houses ---+- (n=5) ***
 
-  HEADLINE FAMILY — success at L2, Holm-corrected over the 6 pairwise comparisons
-          PPO vs PPO+aug   +23.8%  p=0.0000  Holm p=0.0001  significant
-          PPO vs DreamerV3 +40.9%  p=0.0000  Holm p=0.0001  significant
-          PPO vs TD-MPC2   +26.0%  p=0.0000  Holm p=0.0002  significant
-      PPO+aug vs DreamerV3 +17.1%  p=0.0340  Holm p=0.1021
-      PPO+aug vs TD-MPC2    +2.1%  p=0.7159  Holm p=0.7159
-    DreamerV3 vs TD-MPC2   -14.9%  p=0.0450  Holm p=0.1021
+  ALL-PAIRS FAMILY — success at L2  (6 comparisons, Holm-corrected within this family)
+    provenance: every pair of agents present, corrected together. The conservative reading, and the one to quote if only one family is reported.
+            PPO vs PPO+aug     +23.8%  p=0.0000  Holm p=0.0001  significant
+            PPO vs DreamerV3   +40.9%  p=0.0000  Holm p=0.0001  significant
+            PPO vs TD-MPC2     +26.0%  p=0.0000  Holm p=0.0002  significant
+        PPO+aug vs DreamerV3   +17.1%  p=0.0340  Holm p=0.1021
+        PPO+aug vs TD-MPC2      +2.1%  p=0.7159  Holm p=0.7159
+      DreamerV3 vs TD-MPC2     -14.9%  p=0.0450  Holm p=0.1021
+
+  ORIGINAL-FOUR FAMILY — success at L2  (6 comparisons, Holm-corrected within this family)
+    provenance: fixed 2026-09-05, before ppo_jepa, ppo_mae or ppo_dino existed; reported because adding agents later must not retroactively weaken a test that was specified first.
+            PPO vs PPO+aug     +23.8%  p=0.0000  Holm p=0.0001  significant
+            PPO vs DreamerV3   +40.9%  p=0.0000  Holm p=0.0001  significant
+            PPO vs TD-MPC2     +26.0%  p=0.0000  Holm p=0.0002  significant
+        PPO+aug vs DreamerV3   +17.1%  p=0.0340  Holm p=0.1021
+        PPO+aug vs TD-MPC2      +2.1%  p=0.7159  Holm p=0.7159
+      DreamerV3 vs TD-MPC2     -14.9%  p=0.0450  Holm p=0.1021
 
   Compare the two blocks. Same conclusions => one line in the paper.
   Different => that difference IS the result and belongs in the main body.

@@ -11,13 +11,14 @@ agent does better when the target still looks like it did in training.
 
 ## 1. Is there a target effect? (exact sign-flip test, all 2^20 patterns)
 
-| agent | L2noT success | L2 success | effect | agents better / worse / same | p | p (Holm, 6 tests) |
+| agent | L2noT success | L2 success | effect | agents better / worse / same | p | p (Holm, 7 tests) |
 |---|---|---|---|---|---|---|
-| PPO | 0.368 | 0.168 | +0.200 | 11 / 5 / 4 | 0.0052 | 0.0210 |
-| PPO+aug | 0.376 | 0.234 | +0.142 | 12 / 3 / 5 | 0.0038 | 0.0189 |
-| PPO+JEPA | 0.366 | 0.316 | +0.050 | 11 / 3 / 6 | 0.0637 | 0.1912 |
-| PPO+MAE | 0.354 | 0.266 | +0.088 | 14 / 1 / 5 | 0.0007 | 0.0040 |
-| TD-MPC2 | 0.504 | 0.446 | +0.058 | 12 / 7 / 1 | 0.1067 | 0.2133 |
+| PPO | 0.368 | 0.168 | +0.200 | 11 / 5 / 4 | 0.0052 | 0.0262 |
+| PPO+aug | 0.376 | 0.234 | +0.142 | 12 / 3 / 5 | 0.0038 | 0.0227 |
+| PPO+JEPA | 0.366 | 0.316 | +0.050 | 11 / 3 / 6 | 0.0637 | 0.2549 |
+| PPO+MAE | 0.354 | 0.266 | +0.088 | 14 / 1 / 5 | 0.0007 | 0.0047 |
+| PPO+DINOv2 | 0.664 | 0.628 | +0.036 | 12 / 3 / 5 | 0.2084 | 0.4167 |
+| TD-MPC2 | 0.504 | 0.446 | +0.058 | 12 / 7 / 1 | 0.1067 | 0.3200 |
 | DreamerV3 | 0.586 | 0.602 | -0.016 | 8 / 8 / 4 | 0.5341 | 0.5341 |
 
 Per house (mean effect, 5 agents each; too few for a test on their own -- the smallest possible two-sided p with 5 agents is 0.0625):
@@ -28,29 +29,36 @@ Per house (mean effect, 5 agents each; too few for a test on their own -- the sm
 | PPO+aug | +0.360 | +0.208 | +0.008 | -0.008 |
 | PPO+JEPA | +0.088 | +0.040 | +0.080 | -0.008 |
 | PPO+MAE | +0.176 | +0.080 | +0.112 | -0.016 |
+| PPO+DINOv2 | +0.048 | +0.024 | +0.056 | +0.016 |
 | TD-MPC2 | +0.216 | +0.032 | -0.032 | +0.016 |
 | DreamerV3 | +0.016 | +0.040 | -0.072 | -0.048 |
 
 ## 2. Is the target effect bigger for one agent type than another?
 (stratified permutation within house, 200,000 draws)
 
-| comparison | difference in effect | p | p (Holm, 15 tests) |
+| comparison | difference in effect | p | p (Holm, 21 tests) |
 |---|---|---|---|
-| PPO minus PPO+aug | +0.058 | 0.2425 | 0.9464 |
-| PPO minus PPO+JEPA | +0.150 | 0.0096 | 0.1110 |
-| PPO minus PPO+MAE | +0.112 | 0.0275 | 0.2745 |
-| PPO minus TD-MPC2 | +0.142 | 0.0092 | 0.1110 |
-| PPO minus DreamerV3 | +0.216 | <0.0001 | 0.0015 |
-| PPO+aug minus PPO+JEPA | +0.092 | 0.0532 | 0.4531 |
-| PPO+aug minus PPO+MAE | +0.054 | 0.1893 | 0.9464 |
-| PPO+aug minus TD-MPC2 | +0.084 | 0.0612 | 0.4531 |
-| PPO+aug minus DreamerV3 | +0.158 | 0.0006 | 0.0078 |
-| PPO+JEPA minus PPO+MAE | -0.038 | 0.2111 | 0.9464 |
-| PPO+JEPA minus TD-MPC2 | -0.008 | 0.8753 | 0.9464 |
-| PPO+JEPA minus DreamerV3 | +0.066 | 0.0567 | 0.4531 |
-| PPO+MAE minus TD-MPC2 | +0.030 | 0.3872 | 0.9464 |
-| PPO+MAE minus DreamerV3 | +0.104 | 0.0007 | 0.0095 |
-| TD-MPC2 minus DreamerV3 | +0.074 | 0.0503 | 0.4531 |
+| PPO minus PPO+aug | +0.058 | 0.2425 | 1.0000 |
+| PPO minus PPO+JEPA | +0.150 | 0.0096 | 0.1601 |
+| PPO minus PPO+MAE | +0.112 | 0.0275 | 0.4118 |
+| PPO minus PPO+DINOv2 | +0.164 | 0.0079 | 0.1429 |
+| PPO minus TD-MPC2 | +0.142 | 0.0094 | 0.1601 |
+| PPO minus DreamerV3 | +0.216 | 0.0001 | 0.0025 |
+| PPO+aug minus PPO+JEPA | +0.092 | 0.0530 | 0.6375 |
+| PPO+aug minus PPO+MAE | +0.054 | 0.1889 | 1.0000 |
+| PPO+aug minus PPO+DINOv2 | +0.106 | 0.0368 | 0.5147 |
+| PPO+aug minus TD-MPC2 | +0.084 | 0.0602 | 0.6375 |
+| PPO+aug minus DreamerV3 | +0.158 | 0.0005 | 0.0098 |
+| PPO+JEPA minus PPO+MAE | -0.038 | 0.2116 | 1.0000 |
+| PPO+JEPA minus PPO+DINOv2 | +0.014 | 0.7486 | 1.0000 |
+| PPO+JEPA minus TD-MPC2 | -0.008 | 0.8750 | 1.0000 |
+| PPO+JEPA minus DreamerV3 | +0.066 | 0.0567 | 0.6375 |
+| PPO+MAE minus PPO+DINOv2 | +0.052 | 0.1208 | 1.0000 |
+| PPO+MAE minus TD-MPC2 | +0.030 | 0.3872 | 1.0000 |
+| PPO+MAE minus DreamerV3 | +0.104 | 0.0008 | 0.0160 |
+| PPO+DINOv2 minus TD-MPC2 | -0.022 | 0.6221 | 1.0000 |
+| PPO+DINOv2 minus DreamerV3 | +0.052 | 0.1571 | 1.0000 |
+| TD-MPC2 minus DreamerV3 | +0.074 | 0.0490 | 0.6375 |
 
 ## 3. Negative control: pair2 (L2noT and L2 are the same house file)
 
@@ -60,6 +68,7 @@ Per house (mean effect, 5 agents each; too few for a test on their own -- the sm
 | PPO+aug | +0.000 | 0.00 | 1.0000 |
 | PPO+JEPA | +0.000 | 0.00 | 1.0000 |
 | PPO+MAE | +0.000 | 0.00 | 1.0000 |
+| PPO+DINOv2 | +0.000 | 0.00 | 1.0000 |
 | TD-MPC2 | +0.040 | 0.08 | 0.1250 |
 | DreamerV3 | -0.008 | 0.04 | 1.0000 |
 
@@ -67,31 +76,38 @@ Per house (mean effect, 5 agents each; too few for a test on their own -- the sm
 
 | agent | effect | agents better / worse / same | p | p (Holm) |
 |---|---|---|---|---|
-| PPO | +0.152 | 11 / 5 / 4 | 0.0068 | 0.0339 |
-| PPO+aug | +0.100 | 11 / 5 / 4 | 0.0139 | 0.0557 |
-| PPO+JEPA | +0.040 | 12 / 3 / 5 | 0.0328 | 0.0656 |
-| PPO+MAE | +0.064 | 14 / 1 / 5 | 0.0007 | 0.0044 |
-| TD-MPC2 | +0.060 | 13 / 7 / 0 | 0.0152 | 0.0557 |
+| PPO | +0.152 | 11 / 5 / 4 | 0.0068 | 0.0406 |
+| PPO+aug | +0.100 | 11 / 5 / 4 | 0.0139 | 0.0696 |
+| PPO+JEPA | +0.040 | 12 / 3 / 5 | 0.0328 | 0.0983 |
+| PPO+MAE | +0.064 | 14 / 1 / 5 | 0.0007 | 0.0051 |
+| PPO+DINOv2 | +0.026 | 13 / 6 / 1 | 0.2518 | 0.5036 |
+| TD-MPC2 | +0.060 | 13 / 7 / 0 | 0.0152 | 0.0696 |
 | DreamerV3 | -0.013 | 10 / 9 / 1 | 0.5680 | 0.5680 |
 
 | comparison (SPL) | difference | p (Holm) |
 |---|---|---|
 | PPO minus PPO+aug | +0.052 | 1.0000 |
-| PPO minus PPO+JEPA | +0.112 | 0.1157 |
-| PPO minus PPO+MAE | +0.088 | 0.2331 |
-| PPO minus TD-MPC2 | +0.092 | 0.2010 |
-| PPO minus DreamerV3 | +0.165 | 0.0004 |
-| PPO+aug minus PPO+JEPA | +0.060 | 0.6453 |
+| PPO minus PPO+JEPA | +0.112 | 0.1683 |
+| PPO minus PPO+MAE | +0.088 | 0.3627 |
+| PPO minus PPO+DINOv2 | +0.126 | 0.1295 |
+| PPO minus TD-MPC2 | +0.092 | 0.3090 |
+| PPO minus DreamerV3 | +0.165 | 0.0007 |
+| PPO+aug minus PPO+JEPA | +0.060 | 1.0000 |
 | PPO+aug minus PPO+MAE | +0.036 | 1.0000 |
+| PPO+aug minus PPO+DINOv2 | +0.075 | 0.6862 |
 | PPO+aug minus TD-MPC2 | +0.040 | 1.0000 |
-| PPO+aug minus DreamerV3 | +0.114 | 0.0058 |
+| PPO+aug minus DreamerV3 | +0.114 | 0.0096 |
 | PPO+JEPA minus PPO+MAE | -0.024 | 1.0000 |
+| PPO+JEPA minus PPO+DINOv2 | +0.014 | 1.0000 |
 | PPO+JEPA minus TD-MPC2 | -0.020 | 1.0000 |
-| PPO+JEPA minus DreamerV3 | +0.053 | 0.2997 |
+| PPO+JEPA minus DreamerV3 | +0.053 | 0.4875 |
+| PPO+MAE minus PPO+DINOv2 | +0.039 | 1.0000 |
 | PPO+MAE minus TD-MPC2 | +0.004 | 1.0000 |
-| PPO+MAE minus DreamerV3 | +0.078 | 0.0092 |
-| TD-MPC2 minus DreamerV3 | +0.074 | 0.0379 |
+| PPO+MAE minus DreamerV3 | +0.078 | 0.0137 |
+| PPO+DINOv2 minus TD-MPC2 | -0.035 | 1.0000 |
+| PPO+DINOv2 minus DreamerV3 | +0.039 | 1.0000 |
+| TD-MPC2 minus DreamerV3 | +0.074 | 0.0547 |
 
-Where each agent type's 25 numbers came from: PPO: evalonly_300000 25; PPO+aug: evalonly_300000 25; PPO+JEPA: grid_300000 25; PPO+MAE: grid_300000 25; TD-MPC2: evalonly_300000 23, grid_300000 1, rerun_300000 1; DreamerV3: evalonly_300000 19, rerun_300000 6.
+Where each agent type's 25 numbers came from: PPO: evalonly_300000 25; PPO+aug: evalonly_300000 25; PPO+JEPA: grid_300000 25; PPO+MAE: grid_300000 25; PPO+DINOv2: grid_300000 25; TD-MPC2: evalonly_300000 23, grid_300000 1, rerun_300000 1; DreamerV3: evalonly_300000 19, rerun_300000 6.
 
 Settings: permutation draws 200,000, random seed 20260915. Sources per agent: rerun_300000 if retrained, else evalonly_300000, else grid_300000.
