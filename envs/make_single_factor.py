@@ -37,6 +37,24 @@ the ladder changes is missing) and disjoint (no factor changes anything another
 one owns). No training is needed: the agent only ever trains in house A, so
 these are extra houses to EVALUATE existing checkpoints in.
 
+REORDERED LADDER (Vishwas, 2026-09-29). The original ladder puts the most
+damaging change first (L1 = the repaint), so severity does not grow along it.
+The single-change results order the changes by average damage -- clutter 0%,
+lighting 2% and sky 5%, object appearance, surfaces 33% -- and the reordered
+ladder stacks them in that order, each rung CUMULATIVE:
+
+    R1 = clutter                                   (= F_clut, already built)
+    R2 = clutter + lighting + sky                  (new)
+    R3 = clutter + lighting + sky + object looks   (new)
+    R4 = everything                                (= the frozen L3)
+
+R4 is asserted to equal the frozen L3 byte for byte, which shows the order the
+factors are applied in does not matter. The one rung whose change had no house
+of its own is added too, so every rung can also be taken ALONE:
+
+    F_lightsky = lighting + sky only               (new)
+    (clutter alone = F_clut, objects alone = F_objall, surfaces alone = F_mat)
+
     python envs/make_single_factor.py               # every pair
     python envs/make_single_factor.py --pairs pair0
 """
@@ -214,6 +232,18 @@ def f_clut(dst: House, src: House, target: str) -> Dict[str, Any]:
     return {"n_added": len(added), "distractors": added}
 
 
+# Reordered cumulative ladder + the rung it lacked alone. name -> (factors in
+# the order applied, structural rule it is checked under, description).
+COMPOSITES: Dict[str, Tuple[Tuple[str, ...], str, str]] = {
+    "R2": (("F_clut", "F_light", "F_sky"), "L3",
+           "reordered ladder rung 2: clutter + lighting + sky"),
+    "R3": (("F_clut", "F_light", "F_sky", "F_objall"), "L3",
+           "reordered ladder rung 3: clutter + lighting + sky + object appearance"),
+    "F_lightsky": (("F_light", "F_sky"), "L1", "lighting and sky only"),
+}
+# Applying every factor in the reordered order must rebuild the frozen L3.
+REORDERED_TOP: Tuple[str, ...] = ("F_clut", "F_light", "F_sky", "F_objall", "F_mat")
+
 BUILDERS: Dict[str, Callable[[House, House, str], Dict[str, Any]]] = {
     "F_mat": f_mat, "F_light": f_light, "F_sky": f_sky,
     "F_obj": f_obj, "F_tgt": f_tgt, "F_clut": f_clut, "F_objall": f_objall,
@@ -271,6 +301,14 @@ def build_pair(pair_id: str, write: bool = True) -> Dict[str, Any]:
         raise AssertionError(f"{pair_id}: F_objall != F_obj + F_tgt. Nothing written.")
     record["objall_equals_obj_plus_tgt"] = True
 
+    # The reordered ladder's top rung must be the frozen L3, or its rungs would
+    # not be the same changes the original ladder measured.
+    top, _ = _apply(house_a, REORDERED_TOP, sources, target)
+    if top != sources["L3"]:
+        raise AssertionError(f"{pair_id}: the reordered ladder's top rung != frozen L3. "
+                             "Nothing written.")
+    record["reordered_top_equals_L3"] = True
+
     for name in ALL_FACTORS:
         house, rep = _apply(house_a, (name,), sources, target)
         detail = rep[name]
@@ -286,6 +324,16 @@ def build_pair(pair_id: str, write: bool = True) -> Dict[str, Any]:
                                       target_object_type=target)
         record["factors"][name] = {"written": True, "description": spec[2],
                                    **detail}
+        if write:
+            out = pair_house_path(pair_id, name)
+            out.write_text(json.dumps(house, indent=2) + "\n")
+            logger.info("%s %s -> %s", pair_id, name, out.name)
+    record["composites"] = {}
+    for name, (factors, rule, desc) in COMPOSITES.items():
+        house, rep = _apply(house_a, factors, sources, target)
+        assert_structurally_identical(house_a, house, level=rule, target_object_type=target)
+        record["composites"][name] = {"factors": list(factors), "description": desc,
+                                      "written": True}
         if write:
             out = pair_house_path(pair_id, name)
             out.write_text(json.dumps(house, indent=2) + "\n")

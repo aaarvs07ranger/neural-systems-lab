@@ -31,7 +31,8 @@ from envs.generate_variants import (  # noqa: E402
     DISTRACTOR_TAG, _iter_objects, _object_type, assert_structurally_identical,
 )
 from envs.make_single_factor import (  # noqa: E402
-    ALL_FACTORS, CHECKPOINTS, EXTRA, FACTORS, ORDER, _apply, build_pair,
+    ALL_FACTORS, CHECKPOINTS, COMPOSITES, EXTRA, FACTORS, ORDER, REORDERED_TOP,
+    _apply, build_pair,
 )
 
 PAIRS = [f"pair{i}" for i in range(GenerationConfig().n_pairs)]
@@ -183,6 +184,42 @@ def test_build_is_deterministic() -> None:
         after = {n: pair_house_path(pair, n).read_text()
                  for n in ALL_FACTORS if pair_house_path(pair, n).exists()}
         assert before == after
+
+
+def test_reordered_ladder_tops_out_at_the_frozen_l3() -> None:
+    """The reordered ladder applies the same changes in a different order. Its
+    top rung must be the frozen L3 byte for byte, or the two ladders would not
+    be measuring the same changes."""
+    for pair in PAIRS:
+        a, src, tgt = _load(pair, "A"), _sources(pair), _target(pair)
+        top, _ = _apply(a, REORDERED_TOP, src, tgt)
+        assert top == src["L3"], f"{pair}: reordered top rung != frozen L3"
+
+
+def test_reordered_rungs_are_cumulative_and_written_as_built() -> None:
+    """R2 contains R1 (clutter) plus lighting and sky; R3 contains R2 plus the
+    object appearances. Each file on disk equals a fresh composition."""
+    for pair in PAIRS:
+        a, src, tgt = _load(pair, "A"), _sources(pair), _target(pair)
+        prev = ()
+        for name in ("R2", "R3"):
+            factors, rule, _d = COMPOSITES[name]
+            assert factors[:len(prev)] == prev, f"{name} does not extend the rung below it"
+            prev = factors
+            fresh, _ = _apply(a, factors, src, tgt)
+            assert json.loads(pair_house_path(pair, name).read_text()) == fresh, \
+                f"{pair}: {name} on disk differs"
+            assert_structurally_identical(a, fresh, level=rule, target_object_type=tgt)
+        assert COMPOSITES["R2"][0][0] == "F_clut", "rung 1 must be clutter alone"
+
+
+def test_lighting_and_sky_alone_is_the_two_factors_only() -> None:
+    for pair in PAIRS:
+        a, src, tgt = _load(pair, "A"), _sources(pair), _target(pair)
+        house = json.loads(pair_house_path(pair, "F_lightsky").read_text())
+        both, _ = _apply(a, ("F_light", "F_sky"), src, tgt)
+        assert house == both
+        assert house.get("walls") == a.get("walls") and house.get("objects") == a.get("objects")
 
 
 if __name__ == "__main__":

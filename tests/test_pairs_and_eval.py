@@ -284,6 +284,12 @@ def test_every_committed_variant_is_verified() -> None:
         assert rec.get("passed"), f"pair{i} verification.json says not passed"
         for level, entry in rec["levels"].items():
             assert entry["passed"], f"pair{i} {level} did not pass"
+        # ...and the converse, which the check above cannot see: a house file
+        # with NO record at all. Every b_<level>.json must have been gated.
+        for house in sorted(vp.parent.glob("b_*.json")):
+            level = house.stem[len("b_"):]
+            assert level in rec["levels"], (
+                f"pair{i} {house.name} has no C1-C3 record -- gate it before use")
 
 
 def test_every_committed_house_is_a_static_scene() -> None:

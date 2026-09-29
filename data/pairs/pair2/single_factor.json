@@ -160,5 +160,35 @@
       "n_swapped": 12
     }
   },
-  "objall_equals_obj_plus_tgt": true
+  "objall_equals_obj_plus_tgt": true,
+  "reordered_top_equals_L3": true,
+  "composites": {
+    "R2": {
+      "factors": [
+        "F_clut",
+        "F_light",
+        "F_sky"
+      ],
+      "description": "reordered ladder rung 2: clutter + lighting + sky",
+      "written": true
+    },
+    "R3": {
+      "factors": [
+        "F_clut",
+        "F_light",
+        "F_sky",
+        "F_objall"
+      ],
+      "description": "reordered ladder rung 3: clutter + lighting + sky + object appearance",
+      "written": true
+    },
+    "F_lightsky": {
+      "factors": [
+        "F_light",
+        "F_sky"
+      ],
+      "description": "lighting and sky only",
+      "written": true
+    }
+  }
 }
