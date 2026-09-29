@@ -442,6 +442,31 @@ class TDMPC2Config:
     log_every: int = 2_000           # env steps between metric log lines
     save_every: int = 10_000         # env steps between latest.pt checkpoints
 
+    # Identity + optional frozen encoder (see TDMPC2DinoConfig). Empty
+    # frozen_encoder = the upstream rgb recipe above, unchanged.
+    baseline_name: str = "tdmpc2"
+    frozen_encoder: str = ""
+    encoder_dtype: str = "fp16"
+
+
+@dataclass(frozen=True)
+class TDMPC2DinoConfig(TDMPC2Config):
+    """TD-MPC2 whose image encoder is replaced by a frozen DINOv2 feature.
+
+    Added 2026-09-29 (Vishwas): the direct test of whether frozen pretrained
+    features help a model-free learner but hurt a world model that must predict
+    reward from them (Schneider et al., NeurIPS 2024). Same frozen encoder, same
+    single-frame feature, same preprocessing as PPO+DINOv2; the feature enters
+    through TD-MPC2's own upstream 'state' encoder (a trainable MLP -> SimNorm
+    latent), the analogue of PPO+DINOv2's trainable MLP head. Every other
+    hyperparameter is the TD-MPC2 recipe above, so the only change from
+    `tdmpc2` is what the world model sees.
+    """
+
+    baseline_name: str = "tdmpc2_dino"
+    frozen_encoder: str = "facebook/dinov2-giant"
+    encoder_dtype: str = "fp16"
+
 
 @dataclass(frozen=True)
 class SmokeTDMPC2Config(TDMPC2Config):
@@ -460,3 +485,10 @@ class SmokeTDMPC2Config(TDMPC2Config):
     eval_episodes: int = 3
     log_every: int = 100
     save_every: int = 300
+
+
+@dataclass(frozen=True)
+class SmokeTDMPC2DinoConfig(SmokeTDMPC2Config):
+    baseline_name: str = "tdmpc2_dino"
+    frozen_encoder: str = "facebook/dinov2-giant"
+    encoder_dtype: str = "fp16"

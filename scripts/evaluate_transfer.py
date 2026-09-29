@@ -237,19 +237,17 @@ def load_frozen_model(baseline: str, cfg: Any) -> Any:
         adapter = DreamerV3Adapter(cfg)
         adapter.load(DV3_FINAL_MODEL_PATH)
         return adapter
-    if baseline == "tdmpc2":
-        from models.td_mpc2.adapter import (
-            FINAL_MODEL_PATH as TDM_FINAL_MODEL_PATH,
-            TDMPC2Adapter,
-        )
+    if baseline in ("tdmpc2", "tdmpc2_dino"):
+        from models.td_mpc2.adapter import TDMPC2Adapter, run_paths
 
-        if not TDM_FINAL_MODEL_PATH.exists():
+        final_path = run_paths(baseline)[2]
+        if not final_path.exists():
             raise FileNotFoundError(
-                f"{TDM_FINAL_MODEL_PATH} not found — run "
-                "`python main.py --baseline tdmpc2 --stage train` first."
+                f"{final_path} not found — run "
+                f"`python main.py --baseline {baseline} --stage train` first."
             )
         adapter = TDMPC2Adapter(cfg)
-        adapter.load(TDM_FINAL_MODEL_PATH)
+        adapter.load(final_path)
         return adapter
     raise NotImplementedError(f"no frozen-model loader for baseline '{baseline}'")
 
@@ -382,7 +380,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", choices=("ppo", "ppo_aug", "ppo_jepa", "ppo_mae",
-                                               "ppo_dino", "dreamerv3", "tdmpc2"),
+                                               "ppo_dino", "dreamerv3", "tdmpc2",
+                                               "tdmpc2_dino"),
                         default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")
@@ -408,7 +407,9 @@ def main() -> None:
         SmokePPODinoConfig,
         SmokePPOMaeConfig,
         SmokeTDMPC2Config,
+        SmokeTDMPC2DinoConfig,
         TDMPC2Config,
+        TDMPC2DinoConfig,
     )
 
     config_classes = {
@@ -427,6 +428,8 @@ def main() -> None:
         ("dreamerv3", True): SmokeDreamerV3Config,
         ("tdmpc2", False): TDMPC2Config,
         ("tdmpc2", True): SmokeTDMPC2Config,
+        ("tdmpc2_dino", False): TDMPC2DinoConfig,
+        ("tdmpc2_dino", True): SmokeTDMPC2DinoConfig,
     }
     cfg = config_classes[(args.baseline, args.smoke)]()
     if args.episodes is not None:

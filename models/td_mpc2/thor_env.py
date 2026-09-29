@@ -13,6 +13,15 @@ The MPPI planner and Gaussian policy prior operate on the relaxed 5-vector;
 the argmax at the env boundary is the standard one-hot relaxation from the
 plan in ``models/td_mpc2/README.md``. ``rand_act()`` samples uniformly in the
 box, whose argmax is uniform over the 5 discrete actions.
+
+Two observation types
+---------------------
+``rgb`` (the upstream recipe): 64x64 frames, 3 stacked, uint8 CHW.
+``state``: the wrapped env already emits a feature vector (a frozen pretrained
+encoder, see ``envs.frozen_encoder``). It is passed through as float32 with no
+stacking and no resizing -- the same single-frame feature PPO+DINOv2 sees --
+and enters TD-MPC2 through its own upstream 'state' MLP encoder. The type is
+read off the wrapped env's observation space, so it cannot disagree with it.
 """
 from __future__ import annotations
 
@@ -46,7 +55,9 @@ class TDMPC2THOREnv:
     ) -> None:
         self._env = env
         self._size = int(image_size)
-        self._frames: deque = deque(maxlen=int(frame_stack))
+        self.obs_type = "state" if len(env.observation_space.shape) == 1 else "rgb"
+        self._state_dim = int(env.observation_space.shape[0]) if self.obs_type == "state" else 0
+        self._frames: deque = deque(maxlen=1 if self.obs_type == "state" else int(frame_stack))
         self._num_actions = int(env.action_space.n)
         self._seed: Optional[int] = seed  # consumed by the first reset only
         self._rng = np.random.default_rng(seed)
@@ -58,7 +69,14 @@ class TDMPC2THOREnv:
 
     @property
     def obs_shape(self) -> tuple:
+        if self.obs_type == "state":
+            return (self._state_dim,)
         return (self._frames.maxlen * 3, self._size, self._size)
+
+    def _convert(self, obs: np.ndarray) -> np.ndarray:
+        if self.obs_type == "state":
+            return np.asarray(obs, dtype=np.float32)
+        return frame_to_chw(obs, self._size)
 
     def rand_act(self) -> torch.Tensor:
         return torch.from_numpy(
@@ -66,12 +84,13 @@ class TDMPC2THOREnv:
         )
 
     def _stacked_obs(self) -> torch.Tensor:
-        return torch.from_numpy(np.concatenate(self._frames))  # (stack*3, H, W) uint8
+        # rgb: (stack*3, H, W) uint8; state: (dim,) float32 (a single frame)
+        return torch.from_numpy(np.concatenate(self._frames))
 
     def reset(self) -> torch.Tensor:
         obs, _ = self._env.reset(seed=self._seed)
         self._seed = None  # subsequent resets draw fresh start poses
-        frame = frame_to_chw(obs, self._size)
+        frame = self._convert(obs)
         for _ in range(self._frames.maxlen):
             self._frames.append(frame)
         return self._stacked_obs()
@@ -79,7 +98,7 @@ class TDMPC2THOREnv:
     def step(self, action: torch.Tensor):
         discrete = int(torch.as_tensor(action).argmax().item())
         obs, reward, terminated, truncated, info = self._env.step(discrete)
-        self._frames.append(frame_to_chw(obs, self._size))
+        self._frames.append(self._convert(obs))
         out = defaultdict(float, info)
         out["success"] = float(info.get("success", 0.0))
         # True MDP termination only (success); time-limit truncation must NOT

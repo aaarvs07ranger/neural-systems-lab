@@ -25,6 +25,11 @@ Design notes
 * Eval determinism caveat: upstream's ``ShiftAug`` is active at eval, so
   eval actions are mildly stochastic even with ``deterministic=True``
   (documented in VENDOR.md; the paired-seed env protocol is unaffected).
+* Frozen-encoder variant (``tdmpc2_dino``, 2026-09-29): when the config names
+  a ``frozen_encoder``, the env is wrapped by ``envs.frozen_encoder`` exactly as
+  for PPO+DINOv2 and the feature enters through upstream's 'state' encoder.
+  Checkpoints and replay live under the config's ``baseline_name``, so the two
+  TD-MPC2 agents can never read or overwrite each other's files.
 """
 from __future__ import annotations
 
@@ -53,10 +58,14 @@ from models.td_mpc2.thor_env import TDMPC2THOREnv, frame_to_chw
 
 logger = logging.getLogger("tdmpc2_adapter")
 
-TDM_CKPT_DIR = CHECKPOINTS_DIR / "tdmpc2"
-TDM_LOG_DIR = LOGS_DIR / "tdmpc2"
-FINAL_MODEL_PATH = TDM_CKPT_DIR / "tdmpc2_final.pt"
-LATEST_PATH = TDM_CKPT_DIR / "latest.pt"
+def run_paths(name: str = "tdmpc2"):
+    """(checkpoint dir, log dir, final model, latest checkpoint) for one agent."""
+    ckpt = CHECKPOINTS_DIR / name
+    return ckpt, LOGS_DIR / name, ckpt / f"{name}_final.pt", ckpt / "latest.pt"
+
+
+# The original agent's paths, unchanged (evaluation and existing runs use them).
+TDM_CKPT_DIR, TDM_LOG_DIR, FINAL_MODEL_PATH, LATEST_PATH = run_paths("tdmpc2")
 
 
 class _Cfg(SimpleNamespace):
@@ -81,8 +90,15 @@ def _tdmpc2_device() -> str:
     return device
 
 
-def _make_tdmpc2_config(tdm_cfg: TDMPC2Config, num_actions: int) -> _Cfg:
+def _make_tdmpc2_config(tdm_cfg: TDMPC2Config, num_actions: int,
+                        obs_type: str = "rgb", state_dim: int = 0) -> _Cfg:
     """Mirror upstream ``parser.parse_cfg`` output for the vendored modules."""
+    if obs_type == "state":
+        if state_dim <= 0:
+            raise ValueError("state observations need their feature dimension")
+        obs_shape = {"state": (int(state_dim),)}
+    else:
+        obs_shape = {"rgb": (3 * tdm_cfg.frame_stack, tdm_cfg.image_size, tdm_cfg.image_size)}
     from models.td_mpc2.vendor.common import MODEL_SIZE
 
     episode_length = tdm_cfg.max_episode_steps
@@ -95,8 +111,8 @@ def _make_tdmpc2_config(tdm_cfg: TDMPC2Config, num_actions: int) -> _Cfg:
         # Task / obs
         task="procthor-objectnav",
         task_title="ProcTHOR ObjectNav",
-        obs="rgb",
-        obs_shape={"rgb": (3 * tdm_cfg.frame_stack, tdm_cfg.image_size, tdm_cfg.image_size)},
+        obs=obs_type,
+        obs_shape=obs_shape,
         action_dim=int(num_actions),
         episode_length=episode_length,
         episodic=True,          # ObjectNav terminates on success
@@ -186,27 +202,34 @@ class TDMPC2Adapter:
         if total_timesteps != tdm_cfg.total_timesteps:
             tdm_cfg = replace(tdm_cfg, total_timesteps=total_timesteps)
 
-        TDM_CKPT_DIR.mkdir(parents=True, exist_ok=True)
-        eps_dir = TDM_LOG_DIR / "train_eps"  # replay episodes (.pt, gitignored)
+        ckpt_dir, log_dir, final_path, latest_path = run_paths(tdm_cfg.baseline_name)
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        eps_dir = log_dir / "train_eps"  # replay episodes (.pt, gitignored)
         eps_dir.mkdir(parents=True, exist_ok=True)
 
         set_seed(seed)
         env_cfg = build_env_config(tdm_cfg, pair, split="train")
+        # A frozen encoder IS the observation (same helper as PPO+DINOv2, and
+        # as the evaluation path), so it wraps before the TD-MPC2 bridge.
+        from envs.frozen_encoder import wrap_if_frozen_encoder
+        raw_env, _ = wrap_if_frozen_encoder(
+            make_objectnav_env(house_a_path, env_cfg, name="variant_a"), tdm_cfg)
         env = TDMPC2THOREnv(
-            make_objectnav_env(house_a_path, env_cfg, name="variant_a"),
+            raw_env,
             image_size=tdm_cfg.image_size,
             frame_stack=tdm_cfg.frame_stack,
             seed=seed,
             max_episode_steps=tdm_cfg.max_episode_steps,
         )
-        cfg = _make_tdmpc2_config(tdm_cfg, env.num_actions)
+        cfg = _make_tdmpc2_config(tdm_cfg, env.num_actions, env.obs_type,
+                                  env.obs_shape[0] if env.obs_type == "state" else 0)
         cfg.seed = seed
 
         logger.info(
-            "building TD-MPC2 agent on device=%s (model_size=%dM, batch=%d, "
+            "building %s agent on device=%s (obs=%s %s, model_size=%dM, batch=%d, "
             "horizon=%d, seed_steps=%d, budget=%d env steps)",
-            cfg.device, cfg.model_size, cfg.batch_size, cfg.horizon,
-            cfg.seed_steps, cfg.steps,
+            tdm_cfg.baseline_name, cfg.device, cfg.obs, cfg.obs_shape[cfg.obs],
+            cfg.model_size, cfg.batch_size, cfg.horizon, cfg.seed_steps, cfg.steps,
         )
         buffer = Buffer(cfg)
         agent = TDMPC2(cfg)
@@ -240,8 +263,8 @@ class TDMPC2Adapter:
                 buffer.add(td)
             else:
                 dropped_short += 1
-        if LATEST_PATH.exists():
-            ckpt = torch.load(LATEST_PATH, map_location=cfg.device)
+        if latest_path.exists():
+            ckpt = torch.load(latest_path, map_location=cfg.device)
             agent.model.load_state_dict(ckpt["model"])
             agent.optim.load_state_dict(ckpt["optim"])
             agent.pi_optim.load_state_dict(ckpt["pi_optim"])
@@ -249,7 +272,7 @@ class TDMPC2Adapter:
             step = int(ckpt["step"])
             logger.info(
                 "resumed from %s at env step %d (%d episodes on disk)",
-                LATEST_PATH, step, ep_count,
+                latest_path, step, ep_count,
             )
         elif ep_files:
             # Episodes without a checkpoint (crash before first save):
@@ -319,37 +342,49 @@ class TDMPC2Adapter:
 
             step += 1
             if step - last_save >= tdm_cfg.save_every:
-                save_checkpoint(LATEST_PATH)
+                save_checkpoint(latest_path)
                 last_save = step
                 logger.info(
                     "checkpointed at env step %d/%d (%.1f min elapsed)",
                     step, cfg.steps, (time.time() - start) / 60.0,
                 )
 
-        save_checkpoint(LATEST_PATH)
-        agent.save(FINAL_MODEL_PATH)  # upstream format: {"model": state_dict}
+        save_checkpoint(latest_path)
+        agent.save(final_path)  # upstream format: {"model": state_dict}
         env.close()
         logger.info(
             "training finished in %.1f min (%d episodes, %d short-dropped) — "
             "final model: %s",
-            (time.time() - start) / 60.0, ep_count, dropped_short, FINAL_MODEL_PATH,
+            (time.time() - start) / 60.0, ep_count, dropped_short, final_path,
         )
-        return FINAL_MODEL_PATH
+        return final_path
 
     # ------------------------------------------------------------------
     # Frozen-policy evaluation interface
     # ------------------------------------------------------------------
     def load(self, model_path: Path) -> None:
+        import torch
+
         from models.td_mpc2.vendor.tdmpc2 import TDMPC2
 
         env_cfg = build_env_config(self._cfg)
-        cfg = _make_tdmpc2_config(self._cfg, len(env_cfg.actions))
+        if self._cfg.frozen_encoder:
+            # The feature width is fixed by the encoder that trained this model;
+            # read it off the saved state encoder rather than loading the ViT.
+            sd = torch.load(Path(model_path), map_location="cpu")["model"]
+            w = next(v for k, v in sd.items()
+                     if k.startswith("_encoder.state.") and k.endswith("weight") and v.ndim == 2)
+            cfg = _make_tdmpc2_config(self._cfg, len(env_cfg.actions), "state", int(w.shape[1]))
+        else:
+            cfg = _make_tdmpc2_config(self._cfg, len(env_cfg.actions))
         agent = TDMPC2(cfg)
         agent.load(Path(model_path))
         agent.model.eval()
         self._agent = agent
         self.reset_episode()
-        logger.info("loaded frozen TD-MPC2 model from %s", model_path)
+        self._obs_type = cfg.obs
+        logger.info("loaded frozen %s model (obs=%s) from %s",
+                    self._cfg.baseline_name, cfg.obs, model_path)
 
     def reset_episode(self) -> None:
         """Clear the frame stack and planner warm-start at episode boundaries."""
@@ -361,9 +396,20 @@ class TDMPC2Adapter:
     def predict(
         self, observation: np.ndarray, deterministic: bool = True
     ) -> Tuple[int, None]:
-        """Discrete action for one RGB frame (SB3-style ``(action, state)``)."""
+        """Discrete action for one observation (SB3-style ``(action, state)``).
+
+        rgb: one frame, stacked here. state: the frozen-encoder feature the
+        evaluation env already produced, used as-is (single frame).
+        """
         assert self._agent is not None, "call load() before predict()"
         import torch
+
+        if getattr(self, "_obs_type", "rgb") == "state":
+            obs = torch.as_tensor(np.asarray(observation, dtype=np.float32))
+            with torch.no_grad():
+                action = self._agent.act(obs, t0=self._t0, eval_mode=deterministic)
+            self._t0 = False
+            return int(torch.as_tensor(action).argmax().item()), None
 
         frame = frame_to_chw(observation, self._cfg.image_size)
         if self._frames is None:
