@@ -1,13 +1,104 @@
 # NSL Zero-Shot Visual Transfer Baselines (ProcTHOR)
 
-Empirical baseline pipeline for quantifying the **visual-binding problem**:
-how much do standard RL / world-model agents (PPO, DreamerV3, TD-MPC2) degrade
-when transferred zero-shot between two ProcTHOR houses that are **structurally
-identical** (same floorplan, object layout, task graph) but **visually
-disparate** (different wall/floor/ceiling materials, lighting color and
-intensity, skybox)?
+How much do embodied RL agents and world models lose when the room they were
+trained in is **repainted**, while everything that matters for the task stays
+exactly the same?
+
+Each agent learns to find one object (a bed, a fridge or a television) in one
+ProcTHOR house. It is then tested, frozen, in copies of that house that differ
+**only in appearance**: same floor plan, same object positions, same starting
+spots. Appearance is changed step by step, one factor at a time, and in a ladder
+ordered from least to most damaging, to find exactly where each kind of agent
+breaks (the **visual-binding problem**).
 
 Neural Systems Lab, UW — baseline track for the masking + CSCG architecture project.
+
+## How it works (the whole system on one page)
+
+```mermaid
+flowchart TB
+    subgraph S1["① BUILD THE BENCHMARK — once · envs/"]
+        direction LR
+        A1["ProcTHOR-10k<br/>5 small houses"] --> A2["generate_variants.py<br/>house A (training)<br/>+ changed copies"]
+        A2 --> A3["make_single_factor.py<br/>one-change houses<br/>+ reordered ladder"]
+        A3 --> A4["verify_pairs.py<br/>same floor, starts, goal<br/>checked on 3 reloads"]
+        A4 --> A5[("data/pairs/pairN/<br/>houses +<br/>pinned starts")]
+    end
+
+    subgraph S2["② TRAIN — Hyak cluster · sweep_grid.sbatch → main.py --stage train"]
+        direction LR
+        B1["Simulator<br/>AI2-THOR<br/>house A only"] -- "camera image" --> B2["Vision<br/>its own CNN, or a<br/>frozen encoder:<br/>I-JEPA, MAE<br/>or DINOv2"]
+        B2 --> B3["Decision-maker<br/>PPO, or a world<br/>model that plans<br/>ahead: DreamerV3<br/>or TD-MPC2"]
+        B3 -- "move · turn · look" --> B1
+        B1 -. "reward" .-> B3
+        B3 --> B4[("trained models<br/>8 agents × 5 houses<br/>× 5 seeds<br/>300k steps each")]
+    end
+
+    subgraph S3["③ EVALUATE — frozen models, no more learning · main.py --stage eval"]
+        direction LR
+        C1["House A +<br/>every changed house"] --> C2["25 episodes each<br/>from the same<br/>pinned starts"]
+        C2 --> C3["success rate<br/>SPL<br/>episode length"]
+        C3 --> C4[("results/<br/>one table per run")]
+    end
+
+    subgraph S4["④ ANALYSE AND REPORT — scripts/"]
+        direction LR
+        D1["robust_stats.py<br/>make_tables.py …<br/>95% ranges, tests"] --> D4[("results/tables<br/>results/plots")]
+        D2["measure_rgb_shift.py<br/>how much each<br/>image changed"] --> D4
+        D3["tracker.py<br/>where every number<br/>came from"] --> D4
+    end
+
+    S1 -- "house A" --> S2
+    S1 -- "every changed house" --> S3
+    S2 -- "trained models" --> S3
+    S3 -- "per-run tables" --> S4
+```
+
+**① Build the benchmark (once).** Five small houses (pairs P0–P4) come from
+ProcTHOR-10k. In each, *house A* is the house agents train in. Every other house
+is a copy of it with only its appearance changed, in three families:
+
+- **Cumulative ladder:** L1 changes the wall, floor and ceiling materials, the
+  lighting and the sky → L2 also changes the look of every object (L2noT: every
+  object except the goal) → L3 also adds small clutter objects on surfaces.
+- **One change at a time:** each of those changes applied to house A on its own.
+- **Reordered ladder:** the same changes, stacked from least to most damaging:
+  clutter → + lighting and sky → + object looks → + walls, floor and ceiling.
+
+Every copy is checked in the simulator on three separate loads: the walkable
+floor, the 25 evaluation starting spots and the number of goal objects must all
+match house A. Nothing in any house can be pushed around.
+
+**② Train (on the UW Hyak cluster).** Every agent trains in house A only, for
+300,000 steps, with 5 seeds in each of the 5 houses. At every step the simulator
+returns a 128×128 camera image; the agent's *vision* turns it into features; its
+*decision-maker* picks a move (forward, turn, look up or down); and the simulator
+returns a reward (a small cost per step, a bonus for getting closer, +10 for
+reaching the goal).
+
+**③ Evaluate (no more learning).** Each trained agent is run in house A and in
+every changed copy: 25 episodes per house, all from the same pinned starting
+spots, which come from a fifth of the floor never used in training. An episode
+succeeds if the agent gets within 1.5 m of the goal and can see it, within 200
+steps.
+
+**④ Analyse.** Scripts turn the per-run tables into success rates with 95%
+ranges, comparisons between agents, measurements of how much each image changed,
+and figures. `tracker.py` records where every number came from (commit, job,
+settings).
+
+**The eight agents**
+
+| Agent | Vision | Decision-maker |
+|---|---|---|
+| PPO | CNN learned from scratch | PPO (model-free) |
+| PPO+Aug | same, trained on colour-jittered images | PPO |
+| PPO+I-JEPA | frozen I-JEPA encoder (ImageNet) | PPO, small trained head |
+| PPO+MAE | frozen MAE encoder (ImageNet) | PPO, small trained head |
+| PPO+DINOv2 | frozen DINOv2 encoder (LVD-142M) | PPO, small trained head |
+| DreamerV3 | learned inside the world model, which also redraws the image | world model; learns its policy by imagining |
+| TD-MPC2 | learned inside the world model, no redrawing | world model; plans ahead at every step |
+| TD-MPC2+DINOv2 | frozen DINOv2 encoder | TD-MPC2 |
 
 ## Requirements
 
@@ -61,54 +152,50 @@ python main.py --total-steps 300000      # override the training budget
 First `train`/`eval` run downloads the AI2-THOR Unity build (~0.5 GB) and
 opens a small Unity window — this is normal on macOS (no headless mode).
 
-## Experimental protocol
-
-1. **`envs/generate_variants.py`** picks a small (≤2-room) ProcTHOR-10k house
-   containing a preferred ObjectNav target (Television/Fridge/Bed/...).
-   Variant **A** is the house verbatim; variant **B** rewrites *only*
-   appearance fields — wall/floor/ceiling materials (remapped to materials
-   harvested from other ProcTHOR houses, so all names are valid), warm-tinted
-   dimmed lighting, swapped skybox. A structural-identity assertion verifies
-   geometry/objects/doors/windows are byte-identical.
-2. **Task**: ObjectNav to a fixed target type. RGB-only 128×128 egocentric
-   observations, discrete actions (MoveAhead 0.25 m, Rotate±30°, Look±30°).
-   Success = within 1.5 m of a visible target instance. Dense progress
-   shaping + step penalty during training; success/SPL/episode-length logged.
-3. **Training**: on variant A only (`device=mps`), identical 150k-env-step
-   budget per baseline — PPO (SB3 CnnPolicy, 128×128 obs) and DreamerV3
-   (vendored NM512 PyTorch implementation, native 64×64 obs).
-4. **Zero-shot transfer**: the frozen policy is evaluated on A and B with the
-   *same episode seeds* — identical geometry means paired start poses — so the
-   metric gap isolates appearance. **No weight updates, no fine-tuning.**
-5. **Outputs**: per-episode CSVs, aggregate summary (CSV + Markdown), and a
-   bar chart of the A→B drop in `results/`.
+The commands above run locally on the original single house pair and are for
+checking that the pipeline works. **Every reported number comes from the Hyak
+cluster**: `scripts/slurm/sweep_grid.sbatch <agent> 300000` trains one agent in
+all 5 houses × 5 seeds, and `scripts/slurm/factor_eval.sbatch` re-evaluates
+trained models in the one-change and reordered houses. See
+`scripts/slurm/README.md`.
 
 ## Project layout
 
 ```
-config.py                     # single source of truth: paths + hyperparameters
-setup.sh                      # one-command environment setup (M4/MPS)
-main.py                       # pipeline: generate -> train -> transfer eval
+config.py                     # single source of truth: paths + every agent's settings
+setup.sh                      # one-command local environment setup (Apple Silicon)
+setup_hyak.sh                 # the same for the Hyak cluster (Linux/CUDA)
+main.py                       # pipeline: generate -> train -> evaluate
 envs/
-  procthor_env.py             # gymnasium ObjectNav env over a fixed ProcTHOR house
-  generate_variants.py        # paired visual variants A/B + structural identity check
-  augmentation.py             # photometric jitter wrapper (ppo_aug, TRAIN PATH ONLY)
+  procthor_env.py             # the ObjectNav task over one ProcTHOR house
+  task_setup.py               # one task configuration shared by every agent
+  generate_variants.py        # house A + the cumulative ladder (L1, L2noT, L2, L3)
+  scan_safe_assets.py         # finds object swaps that keep the walkable floor identical
+  prune_l3.py                 # removes clutter that falls or blocks the floor
+  make_single_factor.py       # one-change houses + the reordered ladder
+  verify_pairs.py             # simulator checks: same floor, starts and goal count
+  frozen_encoder.py           # frozen I-JEPA / MAE / DINOv2 as the agent's observation
+  augmentation.py             # colour jitter for PPO+Aug (training only)
 models/
-  common.py                   # BaselineAdapter protocol shared by all baselines
-  dreamer_v3/                 # DreamerV3: vendored NM512 impl + adapter + THOR bridge
-  td_mpc2/                    # TD-MPC2: vendored nicklashansen impl + adapter
+  common.py                   # interface shared by all agents
+  dreamer_v3/                 # DreamerV3: vendored NM512 implementation + adapter
+  td_mpc2/                    # TD-MPC2: vendored nicklashansen implementation + adapter
 scripts/
-  train_ppo.py                # PPO / ppo_aug training on variant A
-  evaluate_transfer.py        # frozen-policy A vs B eval, tables + plot
-  tracker.py                  # experiment tracker: backfill/ingest-sweep/add/render
-  plot_baselines.py           # headline figure across all baselines (per-seed dots)
-  record_rollout.py           # paired A/B rollout GIF + filmstrip from a checkpoint
-  visualize_variants.py       # A vs B screenshots from identical poses
-  visualize_augmentation.py   # what ppo_aug sees: jitter draws vs the real A->B shift
-  slurm/                      # Hyak (klone) job templates + workflow README
-tests/                        # contract tests (run directly; the pinned env has no pytest)
-data/                         # house_a/house_b JSON, task config, variant diff summary
-results/                      # checkpoints/, logs/, tables/, plots/, sweeps/, tracker/
+  train_ppo.py                # PPO-family training in house A
+  evaluate_transfer.py        # frozen-model evaluation in every house
+  make_tables.py              # per-agent and per-house tables
+  robust_stats.py             # 95% ranges, robust averages, P(agent X beats agent Y)
+  analyze_grid.py             # comparisons between agents
+  test_single_change.py       # which single change does the damage
+  test_target_effect.py       # does the goal object's own look matter
+  measure_rgb_shift.py        # R, G, B pixel distributions of every house
+  plot_ladder.py              # main results figure
+  tracker.py                  # experiment tracker (results/tracker/runs.csv)
+  record_rollout.py           # filmstrips of one agent across the houses
+  slurm/                      # Hyak cluster job scripts + workflow README
+tests/                        # contract tests (run directly: python tests/test_<name>.py)
+data/pairs/pairN/             # the houses, pinned start poses, verification records
+results/                      # per-run tables, tables/, plots/, tracker/
 ```
 
 ## Evaluation platform rule (important)
