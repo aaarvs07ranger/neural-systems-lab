@@ -66,7 +66,7 @@ politeness setting: each world-model run holds ~6 GB of replay, so 10 at once is
 ~60 GB of peak transient storage instead of ~450 GB. Tighten it with
 `sbatch --array=0-24%4 ...` if scrubbed is under pressure.
 
-Each task copies its tables into `results/grid/<baseline>/pair<N>_seed<M>/` in
+Each task copies its tables into `results/ladder_<k>k/<baseline>/pair<N>_seed<M>/` in
 the repo as soon as they are written, then deletes its own replay buffer and
 intermediate checkpoints, keeping the final model. Tables must land in the repo
 promptly because scrubbed auto-purges after ~21 days and a grid this size
@@ -104,7 +104,7 @@ Per-seed sweep trees (`results_seed*/`) and checkpoints are gitignored — rsync
 what you need (one authenticated ControlMaster connection covers this):
 
 ```bash
-rsync -av klone:/gscratch/scrubbed/$USER/nsl-runs/results_seed*/tables/ ./results/sweeps/
+rsync -av klone:/gscratch/scrubbed/$USER/nsl-runs/results_seed*/tables/ ./results/pilot_one_house/
 ```
 
 ## Known tuning headroom (not yet enabled)

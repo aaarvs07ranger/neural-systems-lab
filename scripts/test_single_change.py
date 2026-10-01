@@ -1,6 +1,6 @@
 """Significance tests for the single-change houses.
 
-Every number comes from ONE evaluation pass (``results/factor_300000/``), in
+Every number comes from ONE evaluation pass (``results/single_change_300k/``), in
 which each trained agent was measured in all twelve houses. That matters: a
 comparison between two rungs is a comparison of the SAME agent on the SAME day,
 so it carries none of the pass-to-pass noise that forced an earlier pooled
@@ -55,7 +55,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from config import TABLES_DIR  # noqa: E402
 from test_target_effect import holm, stratified_perm  # noqa: E402
 
-GRID = "factor_300000"
+GRID = "single_change_300k"
 AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
 NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "ppo_jepa": "PPO + JEPA",
         "ppo_mae": "PPO+MAE", "ppo_dino": "PPO+DINOv2", "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}

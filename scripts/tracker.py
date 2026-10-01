@@ -25,8 +25,8 @@ Subcommands
   add           add a single run from one *_transfer_summary.csv
   render        rewrite summary.md from runs.csv
 
-Typical post-sweep flow (after rsyncing results/sweeps/<name>/seed*/ back):
-  python scripts/tracker.py ingest-sweep results/sweeps/ppo_aug \
+Typical post-sweep flow (after rsyncing results/pilot_one_house/<name>/seed*/ back):
+  python scripts/tracker.py ingest-sweep results/pilot_one_house/ppo_aug \
       --prefix ppo_aug --baseline ppo_aug --date 2026-08-24 \
       --git-commit <sha> --slurm-job <jobid> \
       --recipe "SB3 PPO defaults + photometric jitter, 150k env steps"
@@ -44,7 +44,9 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import PROJECT_ROOT  # noqa: E402
+from config import (  # noqa: E402
+    LADDER_300K_REEVAL, LADDER_300K_RETRAINED, PROJECT_ROOT, SINGLE_CHANGE_300K, ladder_set,
+)
 
 TRACKER_DIR = PROJECT_ROOT / "results" / "tracker"
 RUNS_CSV = TRACKER_DIR / "runs.csv"
@@ -185,7 +187,10 @@ def pair_context(pair: str, level: str) -> Dict[str, str]:
 
 def first_commit_date(path: Path) -> str:
     """Date the file first entered the repo: an upper bound on when the run finished."""
-    out = subprocess.run(["git", "log", "--diff-filter=A", "--format=%ad", "--date=short", "--", str(path)],
+    # --follow: result folders were renamed 2026-09-29; without it every file's
+    # "first added" date would become the rename commit's.
+    out = subprocess.run(["git", "log", "--follow", "--diff-filter=A", "--format=%ad",
+                          "--date=short", "--", str(path)],
                          capture_output=True, text=True, cwd=PROJECT_ROOT).stdout.split()
     if not out:
         raise RuntimeError(f"{path} is not committed; commit results before ingesting them")
@@ -299,7 +304,7 @@ def make_row(*, summary_csv: Path, baseline: str, seed: int, date: str,
 def ingest_sweep(df: pd.DataFrame, sweep_dir: Path, prefix: str,
                  **meta: Any) -> pd.DataFrame:
     # Resolve first: results_path below is stored relative to PROJECT_ROOT, and
-    # relative_to() fails on a CLI-supplied relative path like results/sweeps/x.
+    # relative_to() fails on a CLI-supplied relative path like results/pilot_one_house/x.
     sweep_dir = sweep_dir.resolve()
     seed_dirs = sorted(sweep_dir.glob("seed*"))
     if not seed_dirs:
@@ -318,7 +323,7 @@ def ingest_sweep(df: pd.DataFrame, sweep_dir: Path, prefix: str,
 def ingest_grid(df: pd.DataFrame, grid_dir: Path, **meta: Any) -> pd.DataFrame:
     """Ingest the severity-ladder grid: one row per (run, RUNG).
 
-    Layout is `results/grid/<baseline>/<pair>_seed<N>/<baseline>_transfer_summary.csv`,
+    Layout is `results/ladder_<budget>/<baseline>/<pair>_seed<N>/<baseline>_transfer_summary.csv`,
     and each summary carries four rungs. A run is one trained agent; a ROW is
     that agent measured against one rung, because `shift_level` is a column in
     this schema and a run that produced four measurements is four observations.
@@ -356,14 +361,14 @@ def ingest_grid(df: pd.DataFrame, grid_dir: Path, **meta: Any) -> pd.DataFrame:
 def ingest_ladder(df: pd.DataFrame, budget: int) -> pd.DataFrame:
     """Severity-ladder grid at one budget: one row per (original agent, rung).
 
-    Tree `results/grid` (150k) or `results/grid_<budget>`; rungs L1/L2/L3 from the
+    Tree `results/ladder_<budget>` (e.g. ladder_300k); rungs L1/L2/L3 from the
     committed grid table. At 300k the L2noT rung is added per agent from the table
     that holds BOTH L2noT and L2 for that agent in one evaluation (the same
     `source_for` the target test uses), so the tracker and the paper can never
     disagree. The 7 cells whose saved models were gone get their L2noT from a
     retrained agent: those go in cohort rerun_300k, never in the grid cohort.
     """
-    tree = "grid" if budget == 150_000 else f"grid_{budget}"
+    tree = ladder_set(budget)
     tag = "v2" if budget == 150_000 else f"v2-{budget // 1000}k"
     cohort = f"grid_{budget // 1000}k"
     jobs = GRID_JOBS[budget]
@@ -397,7 +402,7 @@ def ingest_ladder(df: pd.DataFrame, budget: int) -> pd.DataFrame:
         if (baseline, pair, seed) in RERUN_JOBS:
             continue
         src = _l2not_source(baseline, cell.name)
-        from_evalonly = "evalonly_300000" in str(src)
+        from_evalonly = LADDER_300K_REEVAL in str(src)
         row = make_row(summary_csv=src, baseline=baseline, seed=seed, cohort=cohort,
                        date=first_commit_date(src),
                        git_commit=EVALONLY_COMMIT if from_evalonly else commit,
@@ -415,7 +420,7 @@ def ingest_ladder(df: pd.DataFrame, budget: int) -> pd.DataFrame:
 
 
 def ingest_factors(df: pd.DataFrame) -> pd.DataFrame:
-    """The single-change pass: one row per (agent, cell, rung) in results/factor_300000.
+    """The single-change pass: one row per (agent, cell, rung) in results/single_change_300k.
 
     A SEPARATE COHORT, not extra rows on the grid cohort, for two reasons. The
     houses are different houses -- each changes one thing where the ladder rung
@@ -427,13 +432,13 @@ def ingest_factors(df: pd.DataFrame) -> pd.DataFrame:
     No training happened here: every cell reuses a model the grid trained, which
     is why the recipe records the training budget but the job is an eval job.
     """
-    tree = PROJECT_ROOT / "results" / "factor_300000"
+    tree = PROJECT_ROOT / "results" / SINGLE_CHANGE_300K
     if not tree.exists():
         return df
     cells = sorted(tree.glob("*/*_seed*"))
     n_agents = len({c.parent.name for c in cells})
     if len(cells) != 25 * n_agents:
-        raise ValueError(f"results/factor_300000: {len(cells)} cells across "
+        raise ValueError(f"results/{SINGLE_CHANGE_300K}: {len(cells)} cells across "
                          f"{n_agents} agents is not 25 each")
     n = 0
     for cell in cells:
@@ -467,7 +472,7 @@ def ingest_reruns(df: pd.DataFrame) -> pd.DataFrame:
     """Retrained agents (saved model was gone). Never the headline; all five rungs."""
     n = 0
     for (baseline, pair, seed), job in sorted(RERUN_JOBS.items()):
-        cell = PROJECT_ROOT / "results" / "rerun_300000" / baseline / f"{pair}_seed{seed}"
+        cell = PROJECT_ROOT / "results" / LADDER_300K_RETRAINED / baseline / f"{pair}_seed{seed}"
         summary = cell / f"{baseline}_transfer_summary.csv"
         recipe = f"{BASE_RECIPE[baseline]}; {PROTOCOL_V2}; 300k env steps"
         for level in ("L1", "L2noT", "L2", "L3"):
@@ -547,23 +552,23 @@ def cmd_backfill(_: argparse.Namespace) -> None:
     df = load_runs()
     r = PROJECT_ROOT
 
-    df = ingest_sweep(df, r / "results/sweeps/ppo", "ppo",
+    df = ingest_sweep(df, r / "results/pilot_one_house/ppo", "ppo",
                       baseline="ppo", cohort="sweep", date="2026-07-30",
                       git_commit="668268e", slurm_job="37923582",
                       recipe="SB3 PPO defaults, 150k env steps")
-    df = ingest_sweep(df, r / "results/sweeps/dreamerv3_512", "dreamerv3",
+    df = ingest_sweep(df, r / "results/pilot_one_house/dreamerv3_512", "dreamerv3",
                       baseline="dreamerv3", cohort="sweep", date="2026-07-31",
                       git_commit="596ebb4", slurm_job="37948923",
                       recipe="DreamerV3 train_ratio=512, 150k env steps",
                       recipe_tag="r512")
-    df = ingest_sweep(df, r / "results/sweeps/tdmpc2", "tdmpc2",
+    df = ingest_sweep(df, r / "results/pilot_one_house/tdmpc2", "tdmpc2",
                       baseline="tdmpc2", cohort="sweep", date="2026-08-01",
                       git_commit="d78f62a", slurm_job="37982716+37997516",
                       recipe="TD-MPC2 upstream defaults, 150k env steps")
     # Originally added with `ingest-sweep` on 2026-08-24 and never listed here, so
     # a rebuild silently dropped it (caught by the 2026-09-15 rebuild check).
     # Metadata copied verbatim from that ingest.
-    df = ingest_sweep(df, r / "results/sweeps/ppo_aug", "ppo_aug",
+    df = ingest_sweep(df, r / "results/pilot_one_house/ppo_aug", "ppo_aug",
                       baseline="ppo_aug", cohort="sweep", date="2026-08-24",
                       git_commit="8177846", slurm_job="38800341,38801317,38806927",
                       recipe="SB3 PPO defaults + train-time photometric jitter "
@@ -595,23 +600,23 @@ def cmd_backfill(_: argparse.Namespace) -> None:
              id_suffix="main", results_path="results/tables",
              notes="main-seed run; resumed at ~140k after buffer-wraparound "
                    "fix (VENDOR.md patch #10)"),
-        dict(summary_csv=r / "results/archive/dreamerv3_ratio128/dreamerv3_transfer_summary.csv",
+        dict(summary_csv=r / "results/pilot_one_house/superseded/dreamerv3_ratio128/dreamerv3_transfer_summary.csv",
              baseline="dreamerv3", seed=0, date="2026-07-16",
              git_commit="pre-git (code later committed at 9fe95b6)",
              slurm_job="local (M4 Air)", cohort="archive",
              recipe="DreamerV3 train_ratio=128 — UNDERTRAINED (1/4 of "
                     "published recipe)", recipe_tag="r128",
              id_suffix="archived", status="superseded",
-             results_path="results/archive/dreamerv3_ratio128",
+             results_path="results/pilot_one_house/superseded/dreamerv3_ratio128",
              notes="undertraining artifact (18.2% drop reversed at ratio "
                    "512) — the run that motivated the fairness rule"),
-        dict(summary_csv=r / "results/archive/dreamerv3_ratio32_collapsed/dreamerv3_transfer_summary.csv",
+        dict(summary_csv=r / "results/pilot_one_house/superseded/dreamerv3_ratio32_collapsed/dreamerv3_transfer_summary.csv",
              baseline="dreamerv3", seed=0, date="2026-07-14",
              git_commit="pre-git (code later committed at 9fe95b6)",
              slurm_job="local (M4 Air)", cohort="archive",
              recipe="DreamerV3 train_ratio=32 — ACTOR COLLAPSE",
              recipe_tag="r32", id_suffix="collapsed", status="invalid",
-             results_path="results/archive/dreamerv3_ratio32_collapsed",
+             results_path="results/pilot_one_house/superseded/dreamerv3_ratio32_collapsed",
              notes="policy obs-blind (zero actor grad); A==B bit-identical; "
                    "NOT a transfer data point"),
     ]
@@ -831,7 +836,7 @@ def main() -> None:
     a.add_argument("--notes", default="")
 
     g = sub.add_parser("ingest-grid",
-                       help="ingest results/grid: one row per (run, rung)")
+                       help="ingest results/ladder_<budget>: one row per (run, rung)")
     g.add_argument("grid_dir")
     g.add_argument("--date", required=True)
     g.add_argument("--git-commit", required=True)

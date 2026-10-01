@@ -6,9 +6,10 @@ and hyperparameters from this single module so experiments stay reproducible.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Paths (everything is relative to the project root, never the CWD)
@@ -44,6 +45,39 @@ def pair_house_path(pair_id: str, level: str) -> Path:
 
 
 TASK_CONFIG_PATH: Path = DATA_DIR / "task_config.json"  # target object, seeds, provenance
+
+# Result sets under results/. Renamed 2026-09-29 so each folder says what is in
+# it (results/README.md describes every one). Job logs and the session history
+# use the OLD names, hence the map. Cluster-side run roots (scrubbed,
+# nsl-models) keep their old names: the trained models live there and are never
+# moved.
+LADDER_300K = "ladder_300k"                    # headline: every agent, original ladder
+LADDER_150K = "ladder_150k"                    # same ladder, 150k-step budget (appendix)
+LADDER_300K_REEVAL = "ladder_300k_reeval"      # same models re-evaluated, adds L2noT
+LADDER_300K_RETRAINED = "ladder_300k_retrained"  # 7 runs retrained after model loss
+SINGLE_CHANGE_300K = "single_change_300k"      # one change at a time
+REORDERED_LADDER_300K = "reordered_ladder_300k"  # ladder reordered by severity
+PILOT_ONE_HOUSE = "pilot_one_house"            # July-August single-house runs (protocol v1)
+OLD_RESULT_NAMES: Dict[str, str] = {
+    "grid_300000": LADDER_300K, "grid": LADDER_150K,
+    "evalonly_300000": LADDER_300K_REEVAL, "rerun_300000": LADDER_300K_RETRAINED,
+    "factor_300000": SINGLE_CHANGE_300K, "reorder_300000": REORDERED_LADDER_300K,
+    "sweeps": PILOT_ONE_HOUSE, "archive": f"{PILOT_ONE_HOUSE}/superseded",
+}
+
+
+def ladder_set(steps: int) -> str:
+    """Result-set name of the ladder trained for `steps` env steps (e.g. ladder_300k)."""
+    return f"ladder_{steps // 1000}k"
+
+
+def budget_tag(result_set: str) -> str:
+    """'ladder_300k' -> '300k': the tag tables and figures are named by."""
+    m = re.search(r"_(\d+k)(?:_|$)", result_set)
+    if not m:
+        raise ValueError(f"no budget in result-set name {result_set!r}")
+    return m.group(1)
+
 
 # Severity rungs a transfer evaluation walks, in increasing order.
 # L2noT is a CONTROL, not a severity rung: L2 with the target's appearance left

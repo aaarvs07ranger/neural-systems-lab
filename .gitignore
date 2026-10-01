@@ -48,3 +48,7 @@ data/pairs/
 # 79 regenerable plots (6.5 MB) before anyone noticed.
 results/grid*/**/*.png
 results/evalonly_*/**/*.png
+# Same rule under the result-set names adopted 2026-09-29 (see results/README.md).
+results/ladder_*/**/*.png
+results/single_change_*/**/*.png
+results/reordered_ladder_*/**/*.png

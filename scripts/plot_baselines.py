@@ -1,6 +1,6 @@
 """Headline figure: zero-shot visual transfer across all baselines.
 
-Reads the committed per-seed sweep tables under ``results/sweeps/`` and renders
+Reads the committed per-seed sweep tables under ``results/pilot_one_house/`` and renders
 one three-panel comparison (one bar group per baseline) (success rate, SPL, episode length): paired A/B mean
 bars per baseline with per-seed dots and ±1 std whiskers, plus the relative-drop
 annotation that carries the paper's headline. Palette and styling match
@@ -35,10 +35,10 @@ COLOR_BASELINE = "#c3c2b7"
 # Order = the paper's argument: model-free, model-free + the obvious fix,
 # then the two world models.
 SWEEPS = {
-    "PPO": PROJECT_ROOT / "results/sweeps/ppo",
-    "PPO + aug": PROJECT_ROOT / "results/sweeps/ppo_aug",
-    "DreamerV3-512": PROJECT_ROOT / "results/sweeps/dreamerv3_512",
-    "TD-MPC2": PROJECT_ROOT / "results/sweeps/tdmpc2",
+    "PPO": PROJECT_ROOT / "results/pilot_one_house/ppo",
+    "PPO + aug": PROJECT_ROOT / "results/pilot_one_house/ppo_aug",
+    "DreamerV3-512": PROJECT_ROOT / "results/pilot_one_house/dreamerv3_512",
+    "TD-MPC2": PROJECT_ROOT / "results/pilot_one_house/tdmpc2",
 }
 FILE_PREFIX = {"PPO": "ppo", "PPO + aug": "ppo_aug",
                "DreamerV3-512": "dreamerv3", "TD-MPC2": "tdmpc2"}

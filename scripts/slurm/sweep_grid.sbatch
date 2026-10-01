@@ -119,7 +119,9 @@ python main.py --baseline "${BASELINE}" --pair "${PAIR}" --seed "${SEED}" \
 # Tables and plots are kilobytes and are the actual deliverable, so they are
 # copied into the repo immediately: scrubbed purges after ~21 days and a grid
 # this size will straddle that window.
-DEST="${SLURM_SUBMIT_DIR}/results/${GRID_TAG}/${BASELINE}/${CELL}"
+# In the repo the result set is named for what it is (results/README.md);
+# the scrubbed run root above keeps the old name, since models live there.
+DEST="${SLURM_SUBMIT_DIR}/results/ladder_$((STEPS / 1000))k/${BASELINE}/${CELL}"
 mkdir -p "${DEST}"
 cp -f "${NSL_RESULTS_DIR}/tables/"* "${DEST}/" 2>/dev/null || true
 cp -f "${NSL_RESULTS_DIR}/plots/"*  "${DEST}/" 2>/dev/null || true

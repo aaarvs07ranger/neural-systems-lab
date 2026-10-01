@@ -93,10 +93,10 @@ safe way to pick up new results. It needs results to be **committed** (the grid
 
 ## Adding runs (legacy commands)
 
-After rsyncing a sweep back into `results/sweeps/<name>/seed<N>/`:
+After rsyncing a sweep back into `results/pilot_one_house/<name>/seed<N>/`:
 
 ```bash
-python scripts/tracker.py ingest-sweep results/sweeps/ppo_aug \
+python scripts/tracker.py ingest-sweep results/pilot_one_house/ppo_aug \
     --prefix ppo_aug --baseline ppo_aug --date 2026-08-24 \
     --git-commit <sha> --slurm-job <jobid> \
     --recipe "SB3 PPO defaults + photometric jitter, 150k env steps"
@@ -120,7 +120,7 @@ Legacy sweep cohort:
 Grouped by `(baseline, training_recipe, house_pair, shift_level)` over the
 `sweep` cohort. **Relative drops are computed per seed and then averaged**
 (mean ± std of per-seed drops, ddof=1) — matching the committed
-`results/sweeps/*/aggregate.md` convention. This differs from the drop of
+`results/pilot_one_house/*/aggregate.md` convention. This differs from the drop of
 the means when B-variance is high (PPO), so don't mix the two.
 
 ## Provenance caveats

@@ -29,7 +29,7 @@ Every run is used; there is no competency filter here, because no ratio is
 formed.
 
     python scripts/robust_stats.py                       # 300k grid
-    python scripts/robust_stats.py --grid grid           # 150k
+    python scripts/robust_stats.py --grid ladder_150k    # 150k
     -> results/tables/grid_ci_<budget>.md and .json
 """
 from __future__ import annotations
@@ -172,7 +172,7 @@ def render(res: Dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--grid", default="grid_300000")
+    ap.add_argument("--grid", default="ladder_300k")
     a = ap.parse_args()
     res = run(a.grid)
     tables = ROOT / "results" / "tables"

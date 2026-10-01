@@ -21,7 +21,7 @@ control is a separate figure (`plot_target_effect.py`), because for 7 retrained
 agents its numbers come from a different agent than these lines.
 
     python scripts/plot_ladder.py                     # 300k (headline)
-    python scripts/plot_ladder.py --grid grid         # 150k (appendix)
+    python scripts/plot_ladder.py --grid ladder_150k  # 150k (appendix)
     python scripts/plot_ladder.py --all-agents
 """
 from __future__ import annotations
@@ -77,7 +77,8 @@ INK = {"light": ("#fcfcfb", "#0b0b0b", "#52514e", "#e1e0d9", "#c3c2b7"),
 
 
 def budget_tag(grid: str) -> str:
-    return "150k" if grid == "grid" else f"{int(grid.split('_')[1]) // 1000}k"
+    from config import budget_tag as _tag
+    return _tag(grid)
 
 
 def load(grid: str, all_agents: bool) -> pd.DataFrame:
@@ -113,7 +114,7 @@ def pair_meta() -> dict:
     return meta
 
 
-def plot(metric: str = "success", mode: str = "light", grid_name: str = "grid_300000",
+def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_300k",
          all_agents: bool = False) -> Path:
     import matplotlib
     matplotlib.use("Agg")
@@ -247,7 +248,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--metric", choices=("success", "spl"), default="success")
     ap.add_argument("--mode", choices=("light", "dark", "both"), default="both")
-    ap.add_argument("--grid", default="grid_300000")
+    ap.add_argument("--grid", default="ladder_300k")
     ap.add_argument("--all-agents", action="store_true")
     a = ap.parse_args()
     modes = ("light", "dark") if a.mode == "both" else (a.mode,)

@@ -19,7 +19,7 @@ Rules the tables follow:
     each agent is compared with itself in one evaluation.
 
     python scripts/make_tables.py                 # 300k (headline)
-    python scripts/make_tables.py --grid grid     # 150k (appendix)
+    python scripts/make_tables.py --grid ladder_150k   # 150k (appendix)
 """
 from __future__ import annotations
 
@@ -55,7 +55,8 @@ RUNG_NAME = {"A": "A (training house)", "L1": "L1 walls/floor/light",
 
 
 def budget_tag(grid: str) -> str:
-    return "150k" if grid == "grid" else f"{int(grid.split('_')[1]) // 1000}k"
+    from config import budget_tag as _tag
+    return _tag(grid)
 
 
 def load(grid: str) -> pd.DataFrame:
@@ -199,8 +200,8 @@ def target_results(tag: str):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--grid", default="grid_300000",
-                    help="results/<grid> tree: grid_300000 (headline) or grid (150k)")
+    ap.add_argument("--grid", default="ladder_300k",
+                    help="results/<set>: ladder_300k (headline) or ladder_150k (appendix)")
     args = ap.parse_args()
     d = load(args.grid)
     if d.empty:

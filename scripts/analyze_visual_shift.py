@@ -110,7 +110,7 @@ def l1_damage_by_house(tree: str) -> Dict[str, Dict[str, float]]:
             vals = []
             for s in SEEDS:
                 cell = f"{h}_seed{s}"
-                path = (ROOT / "results" / "grid_300000" / agent / cell /
+                path = (ROOT / "results" / "ladder_300k" / agent / cell /
                         f"{agent}_transfer_summary.csv") if tree == "grid" else source_for(agent, cell)
                 R = _summary(path)
                 A = float(R["A"]["success_rate"])

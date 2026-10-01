@@ -5,7 +5,7 @@ answers how big they are, and it exists because those numbers were briefly
 quoted from a throwaway script: every number the paper prints has to come from
 a committed artifact, or it can drift from the data without anyone noticing.
 
-Three things come out of one evaluation pass (`results/factor_300000/`), in
+Three things come out of one evaluation pass (`results/single_change_300k/`), in
 which every trained agent was measured in all twelve houses:
 
   1. THE RANKING. Share of house-A success lost when exactly ONE thing changes,

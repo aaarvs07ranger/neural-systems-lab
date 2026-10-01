@@ -67,7 +67,7 @@ echo "[slurm] eval-only ${BASELINE} ${CELL} at ${STEPS} steps, rungs from EVAL_L
 python main.py --baseline "${BASELINE}" --pair "${PAIR}" --seed "${SEED}" \
     --stage eval --total-steps "${STEPS}" ${NSL_EXTRA_ARGS:-}
 
-DEST="${SLURM_SUBMIT_DIR}/results/evalonly_${STEPS}/${BASELINE}/${CELL}"
+DEST="${SLURM_SUBMIT_DIR}/results/ladder_$((STEPS / 1000))k_reeval/${BASELINE}/${CELL}"
 mkdir -p "${DEST}"
 cp -f "${NSL_RESULTS_DIR}/tables/"* "${DEST}/" 2>/dev/null || true
 echo "[slurm] tables copied to ${DEST}"

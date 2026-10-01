@@ -19,7 +19,7 @@
 # compared against a whole measured last week. A and L1/L2 also re-measure
 # numbers we already hold, which is a free reproducibility check.
 #
-# SEPARATE OUTPUT TREE (results/factor_<steps>/) so no committed result is ever
+# SEPARATE OUTPUT TREE (results/single_change_<k>k/, or $NSL_REPO_SET) so no committed result is ever
 # overwritten -- the same rule eval_only.sbatch follows.
 #
 # CHECKPOINTS ARE SYMLINKED, never copied, and searched across every root that
@@ -95,7 +95,10 @@ echo "[slurm] factor eval ${BASELINE} ${CELL} at ${STEPS} steps, rungs ${LEVELS}
 python scripts/evaluate_transfer.py --baseline "${BASELINE}" --pair "${PAIR}" \
     --levels "${LEVELS}" ${NSL_EXTRA_ARGS:-}
 
-DEST="${SLURM_SUBMIT_DIR}/results/${TAG}/${BASELINE}/${CELL}"
+# Repo result-set name (results/README.md); a custom NSL_FACTOR_TAG (mechanics
+# checks) lands under its own name unless NSL_REPO_SET says otherwise.
+REPO_SET="${NSL_REPO_SET:-${NSL_FACTOR_TAG:-single_change_$((STEPS / 1000))k}}"
+DEST="${SLURM_SUBMIT_DIR}/results/${REPO_SET}/${BASELINE}/${CELL}"
 mkdir -p "${DEST}"
 cp -f "${NSL_RESULTS_DIR}/tables/"* "${DEST}/" 2>/dev/null || true
 echo "[slurm] tables copied to ${DEST}"

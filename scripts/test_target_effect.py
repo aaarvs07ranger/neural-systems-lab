@@ -69,12 +69,12 @@ def _summary(path: Path) -> Dict[str, Dict[str, str]]:
 def source_for(agent: str, cell: str) -> Path:
     """The one table holding BOTH L2noT and L2 for the agent that exists now.
 
-    rerun_300000  : cells retrained because the saved model was gone
-    evalonly_300000: original checkpoints re-evaluated with the L2noT rung
-    grid_300000   : cells whose first (and only) run already included L2noT
+    ladder_300k_retrained : cells retrained because the saved model was gone
+    ladder_300k_reeval    : original checkpoints re-evaluated with the L2noT rung
+    ladder_300k           : cells whose first (and only) run already included L2noT
     """
     name = f"{agent}_transfer_summary.csv"
-    for tree in ("rerun_300000", "evalonly_300000", "grid_300000"):
+    for tree in ("ladder_300k_retrained", "ladder_300k_reeval", "ladder_300k"):
         p = ROOT / "results" / tree / agent / cell / name
         if p.exists() and "L2noT" in _summary(p):
             return p
@@ -266,7 +266,7 @@ def render(res_s: dict, res_spl: dict, draws: int, seed: int) -> str:
     out += ["", "Where each agent type's 25 numbers came from: " +
             "; ".join(f"{NICE[a]}: {counts[a]}" for a in AGENTS) + "."]
     out += ["", f"Settings: permutation draws {draws:,}, random seed {seed}. "
-            "Sources per agent: rerun_300000 if retrained, else evalonly_300000, else grid_300000."]
+            "Sources per agent: ladder_300k_retrained if retrained, else ladder_300k_reeval, else ladder_300k."]
     return "\n".join(out) + "\n"
 
 
