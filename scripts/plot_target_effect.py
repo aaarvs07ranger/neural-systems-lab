@@ -26,10 +26,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import numpy as np
 
+import robust_stats as rs
 import test_target_effect as tte
 from plot_ladder import INK, SERIES
 
-ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
+ORDER = list(tte.AGENTS)        # = config.AGENT_ORDER
 HOUSES = tte.SWAPPABLE + [tte.CONTROL]
 HOUSE_LABEL = {"pair0": "pair0\nFridge", "pair1": "pair1\nBed", "pair3": "pair3\nBed",
                "pair4": "pair4\nTV", "pair2": "pair2\ncontrol"}
@@ -43,11 +44,12 @@ def plot(mode: str) -> Path:
     surface, ink, muted, gridc, basec = INK[mode]
     data = tte.load("success_rate")
     _l, res = tte.analyse("success_rate", draws=200_000, seed=20260915)
+    gc = rs.goal_control()          # the same effects with 95% CIs
 
     # Two rows of three: six panels in one row would squeeze each house label
     # past legibility at paper width.
-    # Seven panels on a 2x4 grid; the spare cell is removed rather than left as
-    # an empty frame that reads as a missing agent.
+    # Eight agent types fill the 2x4 grid; with fewer, the spare cells are removed
+    # rather than left as empty frames that read as a missing agent.
     fig, axes = plt.subplots(2, 4, figsize=(16.5, 6.4), sharey=True, facecolor=surface)
     axes = axes.ravel()
     for spare in axes[len(ORDER):]:
@@ -66,20 +68,24 @@ def plot(mode: str) -> Path:
         ax.axhline(0, color=muted, linewidth=1.2, zorder=1)
         ax.tick_params(colors=muted, labelcolor=ink, length=0, labelsize=8)
         for xi, h in zip(x, HOUSES):
-            d = np.array([r[2] - r[3] for r in data[agent][h]])
+            d = 100 * np.array([r[2] - r[3] for r in data[agent][h]])
             c = basec if h == tte.CONTROL else colour
             ax.scatter(xi + jitter, d, s=34, color=c, edgecolor=surface, linewidth=1.4, zorder=3)
             ax.plot([xi - 0.26, xi + 0.26], [d.mean()] * 2, color=ink, linewidth=2.0,
                     solid_capstyle="round", zorder=4)
         r = res["within"][agent]
         p = r["p_holm"]
-        ax.set_title(f"{label}\nmean {r['effect']:+.2f}, p = {p:.3f}", color=ink, fontsize=9,
-                     loc="left", pad=8)
+        e = gc[agent]["effect_points"]
+        ax.set_title(f"{label}\nmean {e[0]:+.0f} points [{e[1]:.0f}, {e[2]:.0f}], p = {p:.3f}",
+                     color=ink, fontsize=9, loc="left", pad=8)
         ax.set_xticks(x, [HOUSE_LABEL[h] for h in HOUSES], fontsize=7.5)
-    axes[0].set_ylabel("success, target unchanged\nminus success, target changed", color=ink, fontsize=8.5)
-    fig.suptitle("Does changing only the target's appearance hurt?  (300k training steps; "
+    for ax in axes[::4]:
+        ax.set_ylabel("drop in success when only\nthe goal object's look changes\n(points)",
+                      color=ink, fontsize=8.5)
+    fig.suptitle("Does changing only the goal object's look hurt?  (300k training steps; "
                  "dot = one trained agent, bar = house mean; pair2's two houses are identical)\n"
-                 f"p: exact sign-flip test over the 20 agents in pair0/1/3/4, Holm-corrected over {len(ORDER)} agent types",
+                 "Square brackets: 95% CI over the 20 agents in pair0/1/3/4 (stratified bootstrap); "
+                 f"p: exact sign-flip test, Holm-corrected over {len(ORDER)} agent types",
                  color=ink, fontsize=9.5, x=0.008, ha="left", va="top", y=0.99, linespacing=1.5)
     fig.tight_layout()
     fig.subplots_adjust(top=0.82, hspace=0.55)   # title room + keep row-2 titles

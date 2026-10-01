@@ -41,8 +41,8 @@ from config import GenerationConfig, pair_dir
 
 RUNGS = ["A", "L1", "L2", "L3"]
 MIN_A = 0.5
-RUNG_LABEL = {"A": "A\ntrain", "L1": "L1\n+materials\n+lighting",
-              "L2": "L2\n+object\nappearance", "L3": "L3\n+clutter"}
+RUNG_LABEL = {"A": "A\ntrain", "L1": "L1\n+walls/floor\n+light, sky",
+              "L2": "L2\n+object\nlooks", "L3": "L3\n+clutter"}
 
 # Documented categorical palette, slots 1 (blue) and 3 (aqua). Validated
 # all-pairs in both modes: worst CVD dE 23.1 light / 19.6 dark against a target
@@ -71,6 +71,11 @@ SERIES = {
     "ppo_dino":  ("#eb6834", "#d95926", (1.5, 1.5), "PPO + DINOv2 (frozen)"),
     "dreamerv3": ("#1baf7a", "#199e70", (),          "DreamerV3"),
     "tdmpc2":    ("#1baf7a", "#199e70", (5, 2),      "TD-MPC2"),
+    # Eighth agent, added 2026-09-30: TD-MPC2 on the frozen DINOv2 encoder. It
+    # is a world model, so it takes the world-model hue, and the DOTTED pattern,
+    # which already means "frozen DINOv2" in the orange group. Hue = how the agent
+    # decides, dots = DINOv2 vision, in both groups.
+    "tdmpc2_dino": ("#1baf7a", "#199e70", (1.5, 1.5), "TD-MPC2 + DINOv2 (frozen)"),
 }
 INK = {"light": ("#fcfcfb", "#0b0b0b", "#52514e", "#e1e0d9", "#c3c2b7"),
        "dark":  ("#1a1a19", "#ffffff", "#c3c2b7", "#3a3a38", "#52514e")}
@@ -81,7 +86,7 @@ def budget_tag(grid: str) -> str:
     return _tag(grid)
 
 
-def load(grid: str, all_agents: bool) -> pd.DataFrame:
+def load(grid: str, all_agents: bool, rungs=None) -> pd.DataFrame:
     rows = []
     for f in sorted(glob.glob(f"results/{grid}/*/*/*_transfer_summary.csv")):
         p = Path(f)
@@ -90,7 +95,7 @@ def load(grid: str, all_agents: bool) -> pd.DataFrame:
         df = pd.read_csv(f).set_index("level")
         if not all_agents and df.loc["A", "success_rate"] < MIN_A:
             continue
-        for rung in RUNGS:
+        for rung in (rungs or RUNGS):
             rows.append(dict(baseline=baseline, pair=pair, seed=int(seed), rung=rung,
                              success=df.loc[rung, "success_rate"],
                              spl=df.loc[rung, "spl"]))
@@ -115,14 +120,19 @@ def pair_meta() -> dict:
 
 
 def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_300k",
-         all_agents: bool = False) -> Path:
+         all_agents: bool = False, rungs=None, rung_label=None, title=None,
+         out_name=None) -> Path:
+    """One panel per house, one line per agent type, along `rungs` (default: the
+    original ladder). The reordered ladder reuses this with its own rungs."""
+    rungs = list(rungs or RUNGS)
+    rung_label = rung_label or RUNG_LABEL
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
     surface, ink, muted, grid, baseline_c = INK[mode]
-    d = load(grid_name, all_agents)
+    d = load(grid_name, all_agents, rungs)
     if d.empty:
         raise SystemExit(f"no grid results under results/{grid_name}/ yet")
     tag = budget_tag(grid_name)
@@ -136,7 +146,7 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_
     fig, axes = plt.subplots(1, len(pairs), figsize=(3.0 * len(pairs) + 1.6, 3.9),
                              sharey=True, facecolor=surface)
     axes = np.atleast_1d(axes)
-    x = np.arange(len(RUNGS))
+    x = np.arange(len(rungs))
 
     for ax, pid in zip(axes, pairs):
         ax.set_facecolor(surface)
@@ -150,7 +160,7 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_
             sub = d[(d.baseline == b) & (d.pair == pid)]
             if sub.empty:
                 continue
-            g = sub.groupby("rung")[metric].agg(["mean", "std", "count"]).reindex(RUNGS)
+            g = sub.groupby("rung")[metric].agg(["mean", "std", "count"]).reindex(rungs)
             colour = cl if mode == "light" else cd
             ok = g["mean"].notna()
             # +/-1 std over seeds, as a band rather than caps: four overlapping
@@ -166,14 +176,16 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_
                     zorder=3, solid_capstyle="round")
 
         m = meta.get(pid, {})
-        title = f"{pid} · {m.get('target','?')} · {m.get('cells','?')} cells"
-        ax.set_title(title, color=ink, fontsize=9, loc="left", pad=14)
+        panel_title = f"{pid} · {m.get('target','?')} · {m.get('cells','?')} cells"
+        ax.set_title(panel_title, color=ink, fontsize=9, loc="left", pad=14)
         if not m.get("swappable", True):
             # The natural control: this pair's target has no footprint-safe
             # alternative asset, so its L2 changes everything EXCEPT the target.
-            ax.text(0, 1.015, "target NOT swapped at L2", transform=ax.transAxes,
+            note = ("goal object NOT changed at L2" if "L2" in rungs
+                    else "goal object's look never changed")
+            ax.text(0, 1.015, note, transform=ax.transAxes,
                     fontsize=8, color=colour_accent(mode), fontweight="bold")
-        ax.set_xticks(x, [RUNG_LABEL[r] for r in RUNGS], fontsize=7.5)
+        ax.set_xticks(x, [rung_label[r] for r in rungs], fontsize=7.5)
         ax.set_ylim(-0.03, 1.06)
 
     axes[0].set_ylabel("Success rate" if metric == "success" else "SPL",
@@ -190,7 +202,7 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_
         sub = d[(d.baseline == b) & (d.pair == pid)]
         if sub.empty:
             continue
-        g = sub.groupby("rung")[metric].mean().reindex(RUNGS)
+        g = sub.groupby("rung")[metric].mean().reindex(rungs)
         if pd.isna(g.iloc[-1]):
             continue
         ends.append([float(g.iloc[-1]), lab, cl if mode == "light" else cd])
@@ -200,21 +212,18 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_
         if ends[i][0] - ends[i - 1][0] < MIN_GAP:
             ends[i][0] = ends[i - 1][0] + MIN_GAP
     for y, lab, colour in ends:
-        last.annotate(lab, xy=(len(RUNGS) - 1, y), xytext=(11, 0),
+        last.annotate(lab, xy=(len(rungs) - 1, y), xytext=(11, 0),
                       textcoords="offset points", va="center", fontsize=8,
                       color=ink, annotation_clip=False)
-        last.plot([len(RUNGS) - 1 + 0.14], [y], marker="s", markersize=4,
+        last.plot([len(rungs) - 1 + 0.14], [y], marker="s", markersize=4,
                   color=colour, clip_on=False, zorder=4)
 
     # Legend: always present for >=2 series, and every series is also direct-
     # labelled below, so identity never rests on colour alone (the light-mode
     # aqua is under 3:1 on this surface -- the relief rule).
-    handles = [Line2D([0], [0], color=(c if mode == "light" else cd), linewidth=2.0,
-                      dashes=dash if dash else (None, None), marker="o", markersize=5,
-                      markeredgecolor=surface, label=lab)
-               for _b, (c, cd, dash, lab) in SERIES.items()]
+    handles = legend_handles(mode, surface)
     fig.legend(handles=handles, frameon=False, fontsize=8.5, labelcolor=ink,
-               loc="lower center", ncol=6, bbox_to_anchor=(0.5, -0.035))
+               loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.09))
 
     # Name only the agents that actually lost runs to the competency floor;
     # listing "25/25" six times buries the one number a reader needs.
@@ -224,18 +233,43 @@ def plot(metric: str = "success", mode: str = "light", grid_name: str = "ladder_
              f"runs with house-A success ≥ {MIN_A}" +
              (" (all 25/25 except " + ", ".join(dropped) + ")" if dropped
               else ", all 25/25"))
-    fig.suptitle(f"Zero-shot transfer across the severity ladder ({tag} training steps)\n"
-                 f"{'Success rate' if metric=='success' else 'SPL'}, mean ±1 s.d. over training seeds; {which}",
+    fig.suptitle((title or f"Zero-shot transfer across the original ladder ({tag} training steps; "
+                  f"cumulative: each rung keeps the changes before it)") + "\n"
+                 f"{'Success rate' if metric=='success' else 'SPL'}, mean ±1 s.d. over the 5 training seeds; {which}",
                  color=ink, fontsize=10, x=0.008, ha="left", va="top", y=0.99, linespacing=1.5)
     # Right margin reserved for the direct labels, which sit outside the axes.
     fig.tight_layout(rect=(0, 0.06, 0.9, 0.97))
     fig.subplots_adjust(top=0.76)          # room for the two-line figure title
 
     suffix = "_allagents" if all_agents else ""
-    out = Path("results/plots") / f"ladder_{tag}_{metric}{suffix}_{mode}.png"
+    out = Path("results/plots") / ((out_name or f"ladder_{tag}_{metric}") + f"{suffix}_{mode}.png")
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220, facecolor=surface, bbox_inches="tight")
     plt.close(fig)
+    return out
+
+
+# One legend column per group: PPO with vision learned from scratch, PPO on a
+# frozen pretrained encoder, world models. Matplotlib fills legend columns top to
+# bottom, so the two-member first group gets an invisible spacer.
+LEGEND_COLUMNS = (("ppo", "ppo_aug", None), ("ppo_jepa", "ppo_mae", "ppo_dino"),
+                  ("dreamerv3", "tdmpc2", "tdmpc2_dino"))
+
+
+def legend_handles(mode: str, surface: str, linewidth: float = 2.0, markersize: float = 5,
+                   label_of=None) -> list:
+    from matplotlib.lines import Line2D
+    out = []
+    for col in LEGEND_COLUMNS:
+        for b in col:
+            if b is None:
+                out.append(Line2D([], [], linestyle="", marker="", label=" "))
+                continue
+            c, cd, dash, lab = SERIES[b]
+            out.append(Line2D([0], [0], color=(c if mode == "light" else cd), linewidth=linewidth,
+                              dashes=dash if dash else (None, None), marker="o",
+                              markersize=markersize, markeredgecolor=surface,
+                              label=label_of(b) if label_of else lab))
     return out
 
 

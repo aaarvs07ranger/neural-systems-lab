@@ -79,6 +79,32 @@ def budget_tag(result_set: str) -> str:
     return m.group(1)
 
 
+# The agent types, in the order every table and figure lists them: model-free
+# with vision learned from scratch, model-free on a frozen pretrained encoder,
+# then the world models. ONE list for every analysis script: the eighth agent
+# had to be added to twelve separate copies, which is how one gets missed.
+AGENT_ORDER: Tuple[str, ...] = ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino",
+                                "dreamerv3", "tdmpc2", "tdmpc2_dino")
+AGENT_NAME: Dict[str, str] = {
+    "ppo": "PPO", "ppo_aug": "PPO+Aug", "ppo_jepa": "PPO+I-JEPA", "ppo_mae": "PPO+MAE",
+    "ppo_dino": "PPO+DINOv2", "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2",
+    "tdmpc2_dino": "TD-MPC2+DINOv2",
+}
+
+# Reordered cumulative ladder (Vishwas, 2026-09-29): the same changes as the
+# original ladder, stacked from least to most damaging. (house code, plain name).
+# R1 is the clutter-only house and R4 is the frozen L3 house (asserted
+# byte-identical in envs/make_single_factor.py), so only R2 and R3 are new.
+REORDERED_LADDER: Tuple[Tuple[str, str], ...] = (
+    ("A", "training house"), ("F_clut", "R1: clutter"),
+    ("R2", "R2: + lighting & sky"), ("R3", "R3: + object looks"),
+    ("L3", "R4: + walls, floor & ceiling"))
+# The same four changes, each applied to house A on its own.
+REORDERED_ALONE: Tuple[Tuple[str, str], ...] = (
+    ("F_clut", "clutter"), ("F_lightsky", "lighting & sky"),
+    ("F_objall", "object looks"), ("F_mat", "walls, floor & ceiling"))
+
+
 # Severity rungs a transfer evaluation walks, in increasing order.
 # L2noT is a CONTROL, not a severity rung: L2 with the target's appearance left
 # alone. Evaluated alongside the ladder so one run measures both. Ordered by

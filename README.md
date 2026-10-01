@@ -189,7 +189,11 @@ scripts/
   test_single_change.py       # which single change does the damage
   test_target_effect.py       # does the goal object's own look matter
   measure_rgb_shift.py        # R, G, B pixel distributions of every house
+  analyze_rgb_shift.py        # does a bigger colour shift bring a bigger drop?
   plot_ladder.py              # main results figure
+  plot_reordered.py           # the reordered (least to most damaging) ladder
+  plot_rgb_shift.py           # colour distributions; colour shift against drop
+  regenerate_results.sh       # every table and figure above, in one command
   tracker.py                  # experiment tracker (results/tracker/runs.csv)
   record_rollout.py           # filmstrips of one agent across the houses
   slurm/                      # Hyak cluster job scripts + workflow README

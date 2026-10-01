@@ -1,25 +1,26 @@
-"""What each single change costs — the table, generated.
+"""What each single change costs, and whether the costs add up -- generated.
 
-`scripts/test_single_change.py` answers whether differences are real. This
-answers how big they are, and it exists because those numbers were briefly
-quoted from a throwaway script: every number the paper prints has to come from
-a committed artifact, or it can drift from the data without anyone noticing.
+`scripts/test_single_change.py` answers whether differences are real, and
+`scripts/robust_stats.py` gives every single change's drop with a 95% CI (the
+ablation table, `single_change_ci_300k.md`). This file answers the two questions
+those leave open, and exists because those numbers were once quoted from a
+throwaway script: every number the paper prints has to come from a committed
+artifact, or it can drift from the data without anyone noticing.
 
-Three things come out of one evaluation pass (`results/single_change_300k/`), in
-which every trained agent was measured in all twelve houses:
+All from one evaluation pass (`results/single_change_300k/`), in which every
+trained agent was measured in all twelve houses:
 
-  1. THE RANKING. Share of house-A success lost when exactly ONE thing changes,
-     per agent and averaged across them. This is what the cumulative ladder
-     cannot say: L2 contains L1, so the ladder can only report totals.
-  2. THE PARTS AGAINST THE WHOLE. Sum of the individual losses versus the loss
-     of the cumulative rung that contains them. Equal means the changes act
-     independently; less means damage saturates (the agent was already broken);
-     more means the combination is worse than its pieces.
-  3. THE PER-HOUSE SPREAD, for the change that dominates. Pooled means hide a
-     range from a few percent to most of the task.
+  1. THE PARTS AGAINST THE WHOLE. The single changes' drops added together,
+     against the drop of the cumulative rung that contains them. Equal means the
+     changes act independently; less means the damage saturates (the agent was
+     already broken); more means the combination costs more than its pieces.
+  2. THE PER-HOUSE SPREAD of the change that dominates. Pooled means hide a
+     range from a few points to most of the task.
 
-Damage is a ratio, so runs whose house-A success is below 0.5 are left out of
-it (the rule fixed 2026-09-05) and the count kept is printed.
+Units: drops in success rate, in percentage points (house-A success minus
+success in the changed house, same agent), with the relative drop in brackets
+where shown. Runs whose house-A success is below 0.5 are left out (the rule
+fixed 2026-09-05): a run that never learned house A has nothing to drop from.
 
     python scripts/summarize_single_change.py   # -> results/tables/single_change_summary.md
 """
@@ -43,10 +44,10 @@ from test_single_change import AGENTS, GRID, MIN_A, NICE  # noqa: E402
 SINGLE = [
     ("F_light", "lighting", "light colour and brightness"),
     ("F_sky", "sky", "the sky seen through the windows"),
-    ("F_mat", "walls/floor", "wall, floor and ceiling materials"),
-    ("F_obj", "objects (not target)", "every object's look except the target's"),
-    ("F_tgt", "target only", "the target's look, nothing else"),
-    ("F_objall", "all objects", "every object's look, target included"),
+    ("F_mat", "walls/floor/ceiling", "wall, floor and ceiling materials"),
+    ("F_obj", "objects (not goal)", "every object's look except the goal object's"),
+    ("F_tgt", "goal only", "the goal object's look, nothing else"),
+    ("F_objall", "all objects", "every object's look, goal included"),
     ("F_clut", "clutter", "clutter added, nothing else changed"),
 ]
 CUMULATIVE = ["L1", "L2noT", "L2", "L3"]
@@ -57,7 +58,7 @@ DECOMPOSE = [
     ("L2", ["F_mat", "F_light", "F_sky", "F_objall"]),
     ("L3", ["F_mat", "F_light", "F_sky", "F_objall", "F_clut"]),
 ]
-# The four single changes that are one rung's whole change, for the ranking.
+# The six single changes that are each one part of a rung, for the ranking.
 RANKED = ["F_clut", "F_light", "F_obj", "F_sky", "F_tgt", "F_mat"]
 
 
@@ -75,8 +76,12 @@ def load() -> Dict[Tuple[str, str, int, str], float]:
     return out
 
 
-def lost(data, agent: str, rung: str) -> List[Tuple[str, float]]:
-    """(house, share of house-A success lost) for every competent run."""
+def drop(data, agent: str, rung: str, relative: bool = False) -> List[Tuple[str, float]]:
+    """(house, drop in success rate from house A) for every run that learned house A.
+
+    The drop is a fraction of an episode (0.37 = 37 points); `relative` divides it
+    by that run's house-A success.
+    """
     rows = []
     for (a, pair, seed, r), v in data.items():
         if a != agent or r != "A" or v < MIN_A:
@@ -84,7 +89,7 @@ def lost(data, agent: str, rung: str) -> List[Tuple[str, float]]:
         b = data.get((agent, pair, seed, rung))
         if b is None:
             continue
-        rows.append((pair, (v - b) / v))
+        rows.append((pair, (v - b) / v if relative else v - b))
     return rows
 
 
@@ -93,66 +98,71 @@ def mean(xs) -> float:
     return sum(xs) / len(xs) if xs else float("nan")
 
 
-def pct(x: float) -> str:
-    return "—" if x != x else f"{100 * x:.0f}%"
+def pts(x: float) -> str:
+    """A drop as whole percentage points; never '-0'."""
+    if x != x:
+        return "—"
+    t = f"{100 * x:.0f}"
+    return "0" if t == "-0" else t
 
 
 def build() -> str:
     data = load()
     present = [a for a in AGENTS if any(k[0] == a for k in data)]
+    per_agent = {a: {k: mean(v for _h, v in drop(data, a, k)) for k, _h, _d in SINGLE}
+                 for a in present}
 
-    L = ["# What each single change costs", "",
+    L = ["# What each single change costs, and whether the costs add up", "",
          "Generated by `scripts/summarize_single_change.py` — do not edit by hand. "
          f"One evaluation pass (`results/{GRID}/`), 300k training steps, every agent "
-         "measured in all twelve houses. Damage = share of that run's own house-A "
-         f"success lost; runs below house-A {MIN_A} are excluded from the ratio.", "",
-         "## 1. One change at a time", "",
+         "measured in all twelve houses. Numbers are DROPS in success rate in percentage "
+         "points (house-A success minus success in the changed house, same agent), runs that "
+         f"learned house A (house-A success ≥ {MIN_A}). The same drops with 95% CIs: "
+         "`single_change_ci_300k.md`.", "",
+         "## 1. One change at a time (drop in points)", "",
          "| agent | " + " | ".join(h for _k, h, _d in SINGLE) + " |",
          "|---|" + "---|" * len(SINGLE)]
-    per_agent: Dict[str, Dict[str, float]] = {}
     for a in present:
-        per_agent[a] = {k: mean(v for _h, v in lost(data, a, k)) for k, _h, _d in SINGLE}
-        L.append(f"| {NICE[a]} | " + " | ".join(pct(per_agent[a][k]) for k, _h, _d in SINGLE) + " |")
+        L.append(f"| {NICE[a]} | " + " | ".join(pts(per_agent[a][k]) for k, _h, _d in SINGLE) + " |")
 
-    L += ["", "**The ranking**, averaged over the "
-          f"{len(present)} agents (range = least to most affected agent):", "",
-          "| change, on its own | mean | range across agents |", "|---|---|---|"]
-    ranked = sorted(RANKED, key=lambda k: mean(per_agent[a][k] for a in present))
-    for k in ranked:
+    L += ["", f"**The ranking**, averaged over the {len(present)} agent types (range = least "
+          "to most affected agent type):", "",
+          "| change, on its own | mean drop (points) | range across agent types |", "|---|---|---|"]
+    for k in sorted(RANKED, key=lambda k: mean(per_agent[a][k] for a in present)):
         vals = [per_agent[a][k] for a in present]
         desc = next(d for kk, _h, d in SINGLE if kk == k)
-        L.append(f"| {desc} | **{pct(mean(vals))}** | {pct(min(vals))} – {pct(max(vals))} |")
+        L.append(f"| {desc} | **{pts(mean(vals))}** | {pts(min(vals))} to {pts(max(vals))} |")
 
     L += ["", "## 2. Do the parts add up to the whole?", "",
-          "Predicted = the individual losses added together; actual = the cumulative "
-          "rung that contains them, measured in the same pass. Less than predicted means "
-          "damage saturates; more means the combination costs extra.", "",
-          "| agent | " + " | ".join(f"{r} predicted / actual" for r, _p in DECOMPOSE) + " |",
+          "Predicted = the single changes' drops added together; measured = the drop at the "
+          "cumulative rung that contains them, in the same pass. Measured below predicted means "
+          "the damage saturates; above means the combination costs extra. Points.", "",
+          "| agent | " + " | ".join(f"{r} predicted / measured" for r, _p in DECOMPOSE) + " |",
           "|---|" + "---|" * len(DECOMPOSE)]
     for a in present:
         cells = []
         for rung, parts in DECOMPOSE:
             pred = sum(per_agent[a][p] for p in parts)
-            act = mean(v for _h, v in lost(data, a, rung))
-            cells.append(f"{pct(pred)} / **{pct(act)}**")
+            act = mean(v for _h, v in drop(data, a, rung))
+            cells.append(f"{pts(pred)} / **{pts(act)}**")
         L.append(f"| {NICE[a]} | " + " | ".join(cells) + " |")
 
-    L += ["", "## 3. The dominant change, house by house", "",
-          "`F_mat` — repainting walls, floor and ceiling — with nothing else changed.", "",
-          "| agent | " + " | ".join(sorted({k[1] for k in data})) + " |",
-          "|---|" + "---|" * len(sorted({k[1] for k in data}))]
     houses = sorted({k[1] for k in data})
+    L += ["", "## 3. The dominant change, house by house", "",
+          "`F_mat` — repainting walls, floor and ceiling — with nothing else changed. "
+          "Drop in points, mean over that house's runs.", "",
+          "| agent | " + " | ".join(houses) + " |", "|---|" + "---|" * len(houses)]
     for a in present:
-        by_house = {}
-        for h, v in lost(data, a, "F_mat"):
+        by_house: Dict[str, List[float]] = {}
+        for h, v in drop(data, a, "F_mat"):
             by_house.setdefault(h, []).append(v)
-        L.append(f"| {NICE[a]} | " + " | ".join(pct(mean(by_house.get(h, []))) for h in houses) + " |")
+        L.append(f"| {NICE[a]} | " + " | ".join(pts(mean(by_house.get(h, []))) for h in houses) + " |")
 
     L += ["", "## 4. Runs counted", "",
-          "| agent | competent runs (house-A ≥ 0.5) | of |", "|---|---|---|"]
+          f"| agent | runs that learned house A (≥ {MIN_A}) | of |", "|---|---|---|"]
     for a in present:
         tot = len({(p, s) for (ag, p, s, r) in data if ag == a and r == "A"})
-        kept = len(lost(data, a, "F_mat"))
+        kept = len(drop(data, a, "F_mat"))
         L.append(f"| {NICE[a]} | {kept} | {tot} |")
     return "\n".join(L) + "\n"
 

@@ -10,7 +10,8 @@ THE TWO FAMILIES ARE FIXED HERE, BEFORE ANY NUMBER IS COMPUTED, and each is
 Holm-corrected within itself.
 
 FAMILY 1 -- which change hurts (within agent, paired, 3 questions x 6 agent
-types = 18 tests; 21 once PPO+DINOv2 joined on 2026-09-21). The unit is one trained agent; the statistic is the paired
+types = 18 tests; 21 once PPO+DINOv2 joined on 2026-09-21; 24 once TD-MPC2+DINOv2
+joined on 2026-09-30). The unit is one trained agent; the statistic is the paired
 difference in success between two houses that agent was measured in.
     Q1  repaint vs lighting      d = success(F_light) - success(F_mat)
     Q2  target vs other objects  d = success(F_obj)   - success(F_tgt)
@@ -21,9 +22,18 @@ house), so n = 20; Q1 and Q3 use all 25.
 FAMILY 2 -- who is robust to what (between agent, 2 changes x 3 comparisons =
 6 tests). PPO's own CNN against each of the two frozen pretrained encoders and
 against the decoder-free world model, on the two changes Family 1 identifies as
-mattering. The statistic is the share of house-A success LOST, so agents of
-different in-domain skill are comparable, and runs with house-A success below
-0.5 are excluded (the rule fixed 2026-09-05).
+mattering. The statistic is the RELATIVE drop in success rate (drop / house-A
+success), so agents of different in-domain skill are comparable, and runs with
+house-A success below 0.5 are excluded (the rule fixed 2026-09-05).
+
+FAMILIES 3 and 4 -- PPO+DINOv2 (fixed 2026-09-21) and TD-MPC2+DINOv2 (fixed
+2026-09-30) each against every agent that existed when its family was fixed, on
+the repaint. Each is corrected on its own.
+
+These are the declared significance tests (appendix). The paper leads with
+drops in percentage points and their 95% CIs (`single_change_ci_300k.md`).
+Between-agent comparisons draw from their own random stream each, seeded from
+the comparison's names, so adding an agent never changes another p-value.
 
 TESTS
   within agent  : exact sign-flip over all 2^n patterns. Success moves in steps
@@ -43,6 +53,7 @@ import argparse
 import csv
 import glob
 import sys
+import zlib
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -52,13 +63,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from config import TABLES_DIR  # noqa: E402
+from config import AGENT_NAME, AGENT_ORDER, SINGLE_CHANGE_300K, TABLES_DIR  # noqa: E402
 from test_target_effect import holm, stratified_perm  # noqa: E402
 
-GRID = "single_change_300k"
-AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO + aug", "ppo_jepa": "PPO + JEPA",
-        "ppo_mae": "PPO+MAE", "ppo_dino": "PPO+DINOv2", "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
+GRID = SINGLE_CHANGE_300K
+AGENTS = list(AGENT_ORDER)
+NICE = AGENT_NAME
 SWAPPABLE = ["pair0", "pair1", "pair3", "pair4"]
 CONTROL = "pair2"
 MIN_A = 0.5
@@ -84,7 +94,14 @@ BETWEEN = [(rung, "ppo", b) for rung in ("F_mat", "F_tgt")
 # Fixed 2026-09-21, after DINOv2's LADDER means had been seen but before any
 # single-change number for it existed. Stated rather than hidden, and corrected
 # separately so it can never borrow strength from Family 2.
-DINO = [("F_mat", a, "ppo_dino") for a in AGENTS if a != "ppo_dino"]
+DINO = [("F_mat", a, "ppo_dino")
+        for a in ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "tdmpc2", "dreamerv3")]
+# Family 4: TD-MPC2+DINOv2 against each other agent on the repaint. Fixed
+# 2026-09-30, after its ladder means and interval estimates had been seen, and
+# after one cell's single-change numbers had been glanced at during a
+# completeness check, but before any pooled single-change number or p-value for
+# it was computed. Corrected on its own.
+TDD = [("F_mat", a, "tdmpc2_dino") for a in AGENTS if a != "tdmpc2_dino"]
 
 
 # ---------------------------------------------------------------------------- data
@@ -154,12 +171,20 @@ def paired(data, agent: str, good: str, bad: str, houses, metric: int):
 
 
 # ---------------------------------------------------------------------------- analysis
+AGENTS_PRESENT: List[str] = []
+
+
 def analyse(data, metric: int) -> dict:
     res: dict = {"within": {}, "between": {}, "control": {}}
+    present = {a for (a, _p, _s, _r) in data}
+    unknown = present - set(AGENTS)
+    if unknown:
+        raise SystemExit(f"agent(s) not in config.AGENT_ORDER: {sorted(unknown)}")
+    AGENTS_PRESENT[:] = [a for a in AGENTS if a in present]
 
     pvals, keys = [], []
     for key, good, bad, houses, _q in WITHIN:
-        for agent in AGENTS:
+        for agent in AGENTS_PRESENT:
             rows = paired(data, agent, good, bad, houses, metric)
             d = np.array([g - b for _p, g, b in rows])
             if metric == 0:      # success: exact, on integer counts
@@ -181,7 +206,7 @@ def analyse(data, metric: int) -> dict:
     for k, adj in zip(keys, holm(pvals)):
         res["within"][k]["p_holm"] = adj
 
-    # Between agents: share of house-A success lost, per house, competent runs.
+    # Between agents: relative drop in success rate, per house, competent runs.
     def lost(agent: str, rung: str) -> Dict[str, np.ndarray]:
         by_house: Dict[str, List[float]] = {}
         for pair, seed in cells(data, agent, None):
@@ -192,13 +217,15 @@ def analyse(data, metric: int) -> dict:
             by_house.setdefault(pair, []).append((A[metric] - B[metric]) / A[metric])
         return {h: np.array(v) for h, v in by_house.items()}
 
-    rng = np.random.default_rng(20260920)
     pvals, keys = [], []
-    for rung, a, b in BETWEEN + DINO:
+    families = [f for f in (BETWEEN, DINO, TDD)
+                if all(a in AGENTS_PRESENT and b in AGENTS_PRESENT for _r, a, b in f)]
+    for rung, a, b in [k for f in families for k in f]:
         da, db = lost(a, rung), lost(b, rung)
         houses = sorted(set(da) & set(db))
         da = {h: da[h] for h in houses}
         db = {h: db[h] for h in houses}
+        rng = np.random.default_rng([20260920, zlib.crc32(f"{rung}|{a}|{b}|{metric}".encode())])
         obs, p = stratified_perm(da, db, 200_000, rng, TOL)
         res["between"][(rung, a, b)] = {
             "gap_pts": 100 * obs, "p_raw": p, "houses": len(houses),
@@ -208,15 +235,15 @@ def analyse(data, metric: int) -> dict:
         }
         pvals.append(p)
         keys.append((rung, a, b))
-    # Holm WITHIN each declared family, never across the two.
-    for fam in (BETWEEN, DINO):
+    # Holm WITHIN each declared family, never across them.
+    for fam in families:
         idx = [i for i, k in enumerate(keys) if k in fam]
         for i, adj in zip(idx, holm([pvals[i] for i in idx])):
             res["between"][keys[i]]["p_holm"] = adj
 
     # Negative control: pair2 has no target house, so its F_objall IS its F_obj
     # (nothing else can change). Any difference there is evaluation randomness.
-    for agent in AGENTS:
+    for agent in AGENTS_PRESENT:
         rows = paired(data, agent, "F_obj", "F_objall", [CONTROL], metric)
         d = np.array([g - b for _p, g, b in rows])
         p = (sign_flip_exact_counts(np.rint(d * EPISODES).astype(np.int64))
@@ -237,18 +264,18 @@ def render(rs: dict, rspl: dict) -> str:
     L = ["# Which single change hurts, and who survives it", "",
          "Generated by `scripts/test_single_change.py` — do not edit by hand. "
          f"All numbers from one evaluation pass (`results/{GRID}/`), 300k training steps, "
-         f"{len(AGENTS)} agent types × 5 house pairs × 5 training seeds.", "",
+         f"{len(AGENTS_PRESENT)} agent types × 5 house pairs × 5 training seeds.", "",
          "## Family 1 — which change hurts (same agent, same evaluation)", "",
          "One trained agent per row of the underlying data; the effect is the mean paired "
          "difference in success rate. Exact sign-flip test over every possible sign pattern; "
-         f"ties count against the finding. p Holm-corrected over the {len(WITHIN) * len(AGENTS)} "
+         f"ties count against the finding. p Holm-corrected over the {len(WITHIN) * len(AGENTS_PRESENT)} "
          "tests in this family.", ""]
     for key, good, bad, houses, q in WITHIN:
         n_txt = "4 houses, n=20" if houses else "5 houses, n=25"
         L += [f"### {q}", "", f"`{good}` minus `{bad}` ({n_txt})", "",
               f"| agent | success in `{good}` | success in `{bad}` | difference | signs +/0/− | p | p (Holm) | SPL p (Holm) |",
               "|---|---|---|---|---|---|---|---|"]
-        for agent in AGENTS:
+        for agent in AGENTS_PRESENT:
             r = rs["within"][(key, agent)]
             s = rspl["within"][(key, agent)]
             L.append(f"| {NICE[agent]} | {r['mean_good']:.3f} | {r['mean_bad']:.3f} | "
@@ -257,11 +284,11 @@ def render(rs: dict, rspl: dict) -> str:
         L.append("")
 
     L += ["## Family 2 — who is robust to what (between agents)", "",
-          "Share of house-A success lost, runs with house-A success ≥ 0.5. "
+          "Relative drop in success rate (drop / house-A success), runs with house-A success ≥ 0.5. "
           "Stratified permutation, labels shuffled within each house, 200k draws. "
-          "A positive gap means the second agent loses LESS. p Holm-corrected over the 6 "
+          "A positive gap means the second agent drops LESS. p Holm-corrected over the 6 "
           "tests in this family.", "",
-          "| change | agent A | agent B | A loses | B loses | gap (pts) | runs | p | p (Holm) |",
+          "| change | agent A | agent B | A's relative drop | B's relative drop | gap (pts) | runs | p | p (Holm) |",
           "|---|---|---|---|---|---|---|---|---|"]
     for rung, a, b in BETWEEN:
         r = rs["between"][(rung, a, b)]
@@ -269,25 +296,35 @@ def render(rs: dict, rspl: dict) -> str:
                  f"{r['mean_a'] - r['mean_b']:+.1f} | {r['na']}/{r['nb']} | "
                  f"{fmt_p(r['p_raw'])} | **{fmt_p(r['p_holm'])}** |")
 
-    L += ["", "## Family 3 — does the strongest frozen encoder survive a repaint?", "",
-          "DINOv2 against each other agent on `F_mat`, the change Family 1 identifies as "
-          "the damaging one. Fixed 2026-09-21, after DINOv2's ladder means had been seen "
-          "but before any single-change number for it existed; corrected separately from "
-          "Family 2 so neither borrows strength from the other.", "",
-          "| agent | that agent loses | DINOv2 loses | gap (pts) | runs | p | p (Holm) |",
-          "|---|---|---|---|---|---|---|"]
-    for rung, a, b in DINO:
-        r = rs["between"][(rung, a, b)]
-        L.append(f"| {NICE[a]} | {r['mean_a']:.0f}% | {r['mean_b']:.0f}% | "
-                 f"{r['mean_a'] - r['mean_b']:+.1f} | {r['na']}/{r['nb']} | "
-                 f"{fmt_p(r['p_raw'])} | **{fmt_p(r['p_holm'])}** |")
+    for fam, title, text, who in (
+            (DINO, "Family 3 — does the strongest frozen encoder survive a repaint?",
+             "PPO+DINOv2 against each other agent on `F_mat`, the change Family 1 identifies as "
+             "the damaging one. Fixed 2026-09-21, after DINOv2's ladder means had been seen "
+             "but before any single-change number for it existed; corrected on its own, so it "
+             "never borrows strength from another family. Its members are the six agents that "
+             "existed then.", "PPO+DINOv2"),
+            (TDD, "Family 4 — does a planning world model on the same encoder do better?",
+             "TD-MPC2+DINOv2 against each other agent on `F_mat`. Fixed 2026-09-30, after its "
+             "ladder means had been seen (and one cell's single-change numbers glanced at during "
+             "a completeness check) but before any pooled single-change number or p-value for it "
+             "was computed; corrected on its own.", "TD-MPC2+DINOv2")):
+        if (fam[0] not in rs["between"]):
+            continue
+        L += ["", f"## {title}", "", text, "",
+              f"| agent | that agent's relative drop | {who}'s relative drop | gap (pts) | runs | p | p (Holm) |",
+              "|---|---|---|---|---|---|---|"]
+        for rung, a, b in fam:
+            r = rs["between"][(rung, a, b)]
+            L.append(f"| {NICE[a]} | {r['mean_a']:.0f}% | {r['mean_b']:.0f}% | "
+                     f"{r['mean_a'] - r['mean_b']:+.1f} | {r['na']}/{r['nb']} | "
+                     f"{fmt_p(r['p_raw'])} | **{fmt_p(r['p_holm'])}** |")
 
     L += ["", "## Negative control", "",
           "pair2's target has no footprint-safe alternative, so its `F_obj` and `F_objall` "
           "are the SAME house. Any difference is evaluation randomness, and it bounds how "
           "much of an effect elsewhere could be noise.", "",
           "| agent | difference | n | p |", "|---|---|---|---|"]
-    for agent in AGENTS:
+    for agent in AGENTS_PRESENT:
         c = rs["control"][agent]
         L.append(f"| {NICE[agent]} | {c['effect']:+.3f} | {c['n']} | {fmt_p(c['p_raw'])} |")
     return "\n".join(L) + "\n"
@@ -335,11 +372,11 @@ def main() -> None:
     print(f"  wrote {out}")
     for key, _g, _b, _h, q in WITHIN:
         print(f"\n{q}")
-        for agent in AGENTS:
+        for agent in AGENTS_PRESENT:
             r = rs["within"][(key, agent)]
             print(f"   {NICE[agent]:12s} {r['effect']:+.3f}  Holm p={fmt_p(r['p_holm'])}")
-    print("\nBetween agents (share of house-A success lost):")
-    for rung, a, b in BETWEEN + DINO:
+    print("\nBetween agents (relative drop in success rate):")
+    for rung, a, b in [k for k in BETWEEN + DINO + TDD if k in rs["between"]]:
         r = rs["between"][(rung, a, b)]
         print(f"   {rung:7s} {NICE[a]} {r['mean_a']:.0f}% vs {NICE[b]} {r['mean_b']:.0f}%  "
               f"gap {r['mean_a'] - r['mean_b']:+.1f} pts  Holm p={fmt_p(r['p_holm'])}")

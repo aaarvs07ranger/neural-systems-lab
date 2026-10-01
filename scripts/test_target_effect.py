@@ -15,12 +15,15 @@ Tests (all fixed before looking at the numbers):
    one of the 2^20 sign patterns for the 20 agents in the four houses where the
    target was swapped (pair0, pair1, pair3, pair4). p = share of patterns whose
    mean is at least as far from zero as the real one (two-sided). Exact, no
-   random sampling. Holm-corrected across the 6 agent types.
+   random sampling. Holm-corrected across the agent types (8 since TD-MPC2+DINOv2
+   joined on 2026-09-30; 6 when the test was written, 7 from 2026-09-21).
 
 2. Is the effect bigger for one agent type than another -- stratified
    permutation. Within each house, shuffle which agent type each d belongs to;
-   statistic = difference in mean d. 200,000 draws, fixed seed. Holm-corrected
-   across the 15 pairs of agent types. (A significant effect in one type and a
+   statistic = difference in mean d. 200,000 draws. Holm-corrected across every
+   pair of agent types (28 with eight types). Each pair draws from its own random
+   stream seeded from the pair's names, so adding an agent type never changes
+   another pair's p-value. (A significant effect in one type and a
    non-significant one in another is NOT by itself evidence they differ; this
    test is.)
 
@@ -44,15 +47,18 @@ import argparse
 import csv
 import itertools
 import sys
+import zlib
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_mae": "PPO+MAE", "ppo_dino": "PPO+DINOv2",
-        "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
+sys.path.insert(0, str(ROOT))
+from config import AGENT_NAME, AGENT_ORDER  # noqa: E402
+
+AGENTS = list(AGENT_ORDER)
+NICE = AGENT_NAME
 SWAPPABLE = ["pair0", "pair1", "pair3", "pair4"]
 CONTROL = "pair2"
 SEEDS = range(5)
@@ -152,7 +158,6 @@ def holm(pvals: List[float]) -> List[float]:
 def analyse(metric: str, draws: int, seed: int) -> Tuple[List[str], dict]:
     data = load(metric)
     tol = 1e-9
-    rng = np.random.default_rng(seed)
     lines: List[str] = []
     res: dict = {"within": {}, "between": {}, "control": {}}
 
@@ -185,6 +190,7 @@ def analyse(metric: str, draws: int, seed: int) -> Tuple[List[str], dict]:
     for a, b in itertools.combinations(AGENTS, 2):
         da = {h: np.array([r[2] - r[3] for r in data[a][h]]) for h in SWAPPABLE}
         db = {h: np.array([r[2] - r[3] for r in data[b][h]]) for h in SWAPPABLE}
+        rng = np.random.default_rng([seed, zlib.crc32(f"{a}|{b}".encode())])
         diff, p = stratified_perm(da, db, draws, rng, tol)
         res["between"][(a, b)] = dict(diff=diff, p=p)
         raw_b.append(p)

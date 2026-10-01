@@ -19,6 +19,14 @@ house-A success 0.36 where its other eight were 0.92-1.00, and the threshold was
 fixed BEFORE its transfer numbers were looked at, so the choice cannot be fitted
 to the answer.
 
+Each comparison draws from its own random stream, seeded from the pair's names,
+so adding an agent never changes another comparison's p-value.
+
+These are the declared SIGNIFICANCE TESTS, on the relative drop they were
+specified with (drop / house-A success). The paper leads with interval
+estimates on drops in points instead (`scripts/robust_stats.py`, following
+Agarwal et al. 2021); this file is the appendix record.
+
     python scripts/analyze_grid.py                 # 300k -> results/tables/grid_stats_300k.md
     python scripts/analyze_grid.py --grid ladder_150k   # 150k -> results/tables/grid_stats_150k.md
 
@@ -29,6 +37,7 @@ from __future__ import annotations
 import argparse
 import glob
 import sys
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -36,10 +45,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import pandas as pd
 
+from config import AGENT_NAME, AGENT_ORDER
+
 RUNGS = ["L1", "L2", "L3"]
-ORDER = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "dreamerv3", "tdmpc2"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_dino": "PPO+DINOv2",
-        "ppo_mae": "PPO+MAE", "dreamerv3": "DreamerV3", "tdmpc2": "TD-MPC2"}
+ORDER = list(AGENT_ORDER)
+NICE = AGENT_NAME
+# Agents present when each declared family was fixed. A family is NEVER grown by
+# adding an agent later: that is exactly what the correction is meant to stop.
+DINO_FAMILY_AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "dreamerv3", "tdmpc2"]
 
 
 def load(grid: str) -> pd.DataFrame:
@@ -59,8 +72,14 @@ def load(grid: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def stratified_perm(d, a, b, rung, col, draws, rng):
+def pair_rng(seed: int, a: str, b: str, rung: str, col: str) -> np.random.Generator:
+    """One reproducible stream per comparison (crc32 is stable across runs)."""
+    return np.random.default_rng([seed, zlib.crc32(f"{a}|{b}|{rung}|{col}".encode())])
+
+
+def stratified_perm(d, a, b, rung, col, draws, seed):
     """Shuffle the baseline label within each house; statistic = mean gap."""
+    rng = pair_rng(seed, a, b, rung, col)
     sub = d[d.rung == rung]
     obs, pools = [], []
     for pair in sorted(sub.pair.unique()):
@@ -73,37 +92,40 @@ def stratified_perm(d, a, b, rung, col, draws, rng):
     if not pools:
         return None
     observed = float(np.mean(obs))
-    hits = 0
-    for _ in range(draws):
-        diffs = []
-        for pool, k in pools:
-            idx = rng.permutation(len(pool))
-            diffs.append(pool[idx[:k]].mean() - pool[idx[k:]].mean())
-        hits += abs(float(np.mean(diffs))) >= abs(observed) - 1e-12
+    # All draws at once: one independent random ordering of each house's runs
+    # per draw (argsort of uniforms is a uniform random permutation).
+    diffs = np.zeros(draws)
+    for pool, k in pools:
+        perm = pool[np.argsort(rng.random((draws, len(pool))), axis=1)]
+        diffs += perm[:, :k].mean(axis=1) - perm[:, k:].mean(axis=1)
+    diffs /= len(pools)
+    hits = int(np.count_nonzero(np.abs(diffs) >= abs(observed) - 1e-12))
     signs = "".join("+" if x > 0 else "-" for x in obs)
     return observed, (hits + 1) / (draws + 1), signs, len(pools)
 
 
 def report(d: pd.DataFrame, draws: int, seed: int, title: str) -> None:
-    rng = np.random.default_rng(seed)
     present = [b for b in ORDER if b in set(d.baseline)]
+    unknown = set(d.baseline) - set(ORDER)
+    if unknown:
+        raise SystemExit(f"agent(s) not in config.AGENT_ORDER: {sorted(unknown)}")
     print(f"\n{'='*78}\n{title}\n{'='*78}")
     n = d.groupby("baseline").apply(lambda g: g.pair.count() // len(RUNGS),
                                     include_groups=False)
     print("  cells per baseline:", {NICE[k]: int(v) for k, v in n.items()})
-    print("\n  mean relative drop (pooled over houses and seeds)")
+    print("\n  mean relative drop in success rate (drop / house-A success; pooled over houses and seeds)")
     pv = d.pivot_table(index="baseline", columns="rung", values="drop")
     print("    " + pv.reindex(present).round(3).to_string().replace("\n", "\n    "))
 
     print("\n  pairwise, stratified permutation over houses"
-          "  (positive = the SECOND agent is more robust)")
+          "  (gap in relative drop; positive = the SECOND agent drops less)")
     headline = []                          # success at L2: the pre-specified family
     for i, a in enumerate(present):
         for b in present[i + 1:]:
             print(f"\n    --- {NICE[a]} vs {NICE[b]} ---")
             for col, label in (("drop", "success"), ("spl_drop", "SPL")):
                 for rung in RUNGS:
-                    r = stratified_perm(d, a, b, rung, col, draws, rng)
+                    r = stratified_perm(d, a, b, rung, col, draws, seed)
                     if r is None:
                         continue
                     o, p, signs, k = r
@@ -136,7 +158,7 @@ def report(d: pd.DataFrame, draws: int, seed: int, title: str) -> None:
         print(f"\n  {title}  ({len(ps)} comparisons, Holm-corrected within this family)")
         print(f"    provenance: {provenance}")
         for (a, b, o, p), pa in zip(rows, adj):
-            print(f"    {NICE[a]:>11} vs {NICE[b]:<11} {o:+6.1%}  p={p:.4f}  Holm p={pa:.4f}"
+            print(f"    {NICE[a]:>14} vs {NICE[b]:<14} {o:+6.1%}  p={p:.4f}  Holm p={pa:.4f}"
                   f"{'  significant' if pa < 0.05 else ''}")
 
     report_family(
@@ -159,17 +181,35 @@ def report(d: pd.DataFrame, draws: int, seed: int, title: str) -> None:
     # Does the strongest available frozen encoder help? One agent against each
     # of the others, at the rung where every agent breaks.
     dino = []
-    for a in present:
-        if a == "ppo_dino":
+    for a in DINO_FAMILY_AGENTS:
+        if a not in present:
             continue
-        r = stratified_perm(d, a, "ppo_dino", "L1", "drop", draws, rng)
+        r = stratified_perm(d, a, "ppo_dino", "L1", "drop", draws, seed)
         if r is not None:
             dino.append((a, "ppo_dino", r[0], r[1]))
     report_family(
         "DINOv2 FAMILY — success at L1",
         "fixed 2026-09-21, after DINOv2's mean damage had been seen but before "
-        "any p-value was computed. Stated rather than hidden.",
+        "any p-value was computed. Stated rather than hidden. Its six members are "
+        "the agents that existed then; TD-MPC2+DINOv2 has its own family below.",
         dino)
+
+    # Does a world model that plans gain from the same frozen encoder? The
+    # eighth agent against each of the other seven, at the same rung.
+    if "tdmpc2_dino" in present:
+        tdd = []
+        for a in present:
+            if a == "tdmpc2_dino":
+                continue
+            r = stratified_perm(d, a, "tdmpc2_dino", "L1", "drop", draws, seed)
+            if r is not None:
+                tdd.append((a, "tdmpc2_dino", r[0], r[1]))
+        report_family(
+            "TD-MPC2+DINOv2 FAMILY — success at L1",
+            "fixed 2026-09-30, after TD-MPC2+DINOv2's ladder means and interval "
+            "estimates had been seen but before any p-value was computed. Stated "
+            "rather than hidden.",
+            tdd)
 
 
 def main() -> None:
@@ -184,9 +224,12 @@ def main() -> None:
     tag = budget_tag(grid)
     out = Path("results/tables") / f"grid_stats_{tag}.md"
     out.write_text(f"# Grid statistics ({tag} steps)\n\nGenerated by `scripts/analyze_grid.py`"
-                   " -- do not edit by hand. Statistic: mean gap in relative success/SPL drop"
-                   " between two agent types, averaged over houses; positive = the SECOND agent"
-                   " loses less. Labels shuffled within each house.\n\n```\n" + text + "```\n")
+                   " -- do not edit by hand. Statistic: mean gap in the RELATIVE drop in success"
+                   " rate (or SPL) between two agent types, i.e. drop / house-A success, averaged"
+                   " over houses; positive = the SECOND agent drops less. Labels shuffled within"
+                   " each house. These are the declared significance tests (appendix); the paper"
+                   " leads with drops in percentage points and their 95% CIs in"
+                   " `grid_ci_<budget>.md`.\n\n```\n" + text + "```\n")
     print(f"  wrote {out}")
 
 

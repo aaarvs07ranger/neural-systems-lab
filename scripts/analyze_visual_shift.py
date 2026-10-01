@@ -12,10 +12,16 @@ Treating each agent as a separate data point would count the same image change
 25 times and manufacture significance.
 
 Q1 (main). Across the 5 houses, does a bigger L1 image change bring bigger L1
-    damage? Damage = fraction of house-A success lost, (A - L1) / A, averaged over
-    that house's agents. Runs with house-A success < 0.5 are left out of this ratio
-    (a near-zero denominator makes it meaningless; the rule was fixed on
-    2026-09-05, before any of this analysis). Agents: the committed 300k grid.
+    damage? Damage = drop in success rate at L1, A - L1, in percentage points,
+    averaged over that house's agents. Runs with house-A success < 0.5 are left
+    out (a run that never learned house A has nothing to drop from; the rule was
+    fixed on 2026-09-05, before any of this analysis). Agents: the committed 300k
+    ladder. (Until 2026-09-30 the damage was the RELATIVE drop, (A - L1) / A; the
+    wording rule moved every table to points.)
+
+    Superseded as the main image-change analysis by `analyze_rgb_shift.py`, which
+    uses every house the benchmark defines (69 house-variant pairs, not 5) and
+    per-channel colour distributions. Kept because the paper's appendix cites it.
     Statistic: Spearman rank correlation. p: exact, over all 120 orderings of the
     5 houses. With 5 houses even a perfect rank match gives p = 2/120 = 0.017, so
     this test can only detect an almost perfect relationship; the table beside it
@@ -49,9 +55,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from test_target_effect import source_for  # noqa: E402  same-pass table per agent
 
-AGENTS = ["ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino", "tdmpc2", "dreamerv3"]
-NICE = {"ppo": "PPO", "ppo_aug": "PPO+aug", "ppo_jepa": "PPO+JEPA", "ppo_mae": "PPO+MAE", "ppo_dino": "PPO+DINOv2",
-        "tdmpc2": "TD-MPC2", "dreamerv3": "DreamerV3"}
+sys.path.insert(0, str(ROOT))
+from config import AGENT_NAME, AGENT_ORDER  # noqa: E402
+
+AGENTS = list(AGENT_ORDER)
+NICE = AGENT_NAME
 HOUSES = ["pair0", "pair1", "pair2", "pair3", "pair4"]
 SEEDS = range(5)
 MIN_A = 0.5
@@ -98,7 +106,7 @@ def spearman_exact(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
 
 # ------------------------------------------------------------------------ data
 def l1_damage_by_house(tree: str) -> Dict[str, Dict[str, float]]:
-    """agent -> house -> mean (A - L1)/A over runs with A >= MIN_A.
+    """agent -> house -> mean drop A - L1 (fraction of episodes) over runs with A >= MIN_A.
 
     tree='grid'   : committed 300k grid (the headline agents)
     tree='same'   : the table holding L2noT for the agent that exists now
@@ -115,13 +123,13 @@ def l1_damage_by_house(tree: str) -> Dict[str, Dict[str, float]]:
                 R = _summary(path)
                 A = float(R["A"]["success_rate"])
                 if A >= MIN_A:
-                    vals.append((A - float(R["L1"]["success_rate"])) / A)
+                    vals.append(A - float(R["L1"]["success_rate"]))
             out[agent][h] = float(np.mean(vals)) if vals else float("nan")
     return out
 
 
 def step_costs() -> Dict[str, Dict[str, Dict[str, float]]]:
-    """agent -> house -> {step: mean success lost over that step}, same-pass tables."""
+    """agent -> house -> {step: mean drop in success over that step}, same-pass tables."""
     steps = [("L1", "A"), ("L2noT", "L1"), ("L2", "L2noT"), ("L3", "L2")]
     out: Dict[str, Dict[str, Dict[str, float]]] = {}
     for agent in AGENTS:
@@ -166,8 +174,9 @@ def run() -> str:
         "Image change is measured at the 25 pinned start poses, house A vs the shifted house,",
         "with no agent involved. **The unit is the house: 5 independent measurements.**", "",
         "## Q1. Does a bigger L1 image change bring bigger L1 damage?", "",
-        "Damage = share of house-A success lost at L1, averaged over the house's agents "
-        f"(runs with house-A success < {MIN_A} left out of the ratio).", "",
+        "Damage = drop in success rate at L1 (house-A success minus L1 success, in "
+        "percentage points), averaged over the house's agents "
+        f"(runs with house-A success < {MIN_A} left out: nothing to drop from).", "",
         "| house | cells | mean pixel diff | pixels changed | histogram dist | "
         + " | ".join(NICE[a] for a in AGENTS) + " | all agents |",
         "|---" * (5 + len(AGENTS) + 1) + "|",
@@ -175,8 +184,8 @@ def run() -> str:
     for h in sorted(HOUSES, key=lambda k: shift[k]["L1"]["mean_abs_diff"]):
         s = shift[h]["L1"]
         L.append(f"| {h} | {sizes[h]} | {s['mean_abs_diff']:.1f} | {100*s['frac_pixels_changed']:.0f}% | "
-                 f"{s['hist_l1']:.2f} | " + " | ".join(f"{100*dmg[a][h]:.0f}%" for a in AGENTS)
-                 + f" | **{100*pooled[h]:.0f}%** |")
+                 f"{s['hist_l1']:.2f} | " + " | ".join(f"{100*dmg[a][h]:.0f}" for a in AGENTS)
+                 + f" | **{100*pooled[h]:.0f}** |")
     L += ["", "(rows ordered by mean pixel difference)", "",
           "Rank correlation with damage (Spearman; exact p over all 120 orderings; "
           "smallest possible p = 0.017):", "",
@@ -201,10 +210,10 @@ def run() -> str:
 
     # Q2
     costs = step_costs()
-    L += ["", "## Q2. What does each rung add, in image change and in lost success?", "",
+    L += ["", "## Q2. What does each rung add, in image change and in drop in success?", "",
           "Image change added = increase in mean pixel difference from the previous rung. "
-          "Success lost = drop in success rate over that step (same agent, same evaluation), "
-          "averaged over the house's 5 agents.", ""]
+          "Drop = fall in success rate over that step, as a fraction of episodes (same agent, "
+          "same evaluation), averaged over the house's 5 agents.", ""]
     # A->L1 is Q1's question, answered there with the house-A < 0.5 rule; repeated
     # here as a raw difference it would let agents that never learned house A
     # "improve" under shift. Q2 starts from L1.
@@ -221,7 +230,7 @@ def run() -> str:
             L.append(f"| {h} | {added:+.1f} | " + " | ".join(
                 f"{costs[a][h][key]:+.2f}" for a in AGENTS) + " |")
         L.append("")
-    L.append("Positive success lost = the agent did worse after this step.")
+    L.append("Positive drop = the agent did worse after this step.")
     return "\n".join(L) + "\n"
 
 

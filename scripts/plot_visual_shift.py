@@ -1,11 +1,11 @@
 """Damage vs how much the image changed -- two panels.
 
 (a) One point per house: how much the L1 shift changed the start-view image (x)
-    against the share of house-A success agents lost at L1 (y, all four agent
-    types averaged; the vertical line spans the lowest to highest agent type).
+    against the drop in success rate at L1, in points (y, all agent types
+    averaged; the vertical line spans the lowest to highest agent type).
     Five points, because the image change is one measurement per house.
 (b) One point per house per rung step (L1->L2noT other objects, L2noT->L2 the
-    target, L2->L3 clutter): image change that step added (x) against success lost
+    target, L2->L3 clutter): image change that step added (x) against the drop in success
     over the step (y), for PPO and DreamerV3 -- the agent types at the two ends of
     the target test. Marker shape = which step. All four agent types are in
     results/tables/visual_shift_analysis.md.
@@ -34,7 +34,7 @@ import analyze_visual_shift as avs
 from plot_ladder import INK, SERIES
 
 STEPS = [("L1->L2noT", "L1", "L2noT", "other objects' look", "o"),
-         ("L2noT->L2", "L2noT", "L2", "target's look only", "^"),
+         ("L2noT->L2", "L2noT", "L2", "goal object's look only", "^"),
          ("L2->L3", "L2", "L3", "clutter added", "s")]
 SHOWN = ["ppo", "dreamerv3"]
 
@@ -75,7 +75,7 @@ def plot(mode: str) -> Path:
         ax1.annotate(h, (xi, 100 * yi), xytext=(8, 4), textcoords="offset points",
                      fontsize=8.5, color=ink)
     ax1.set_xlabel("image change at L1  (mean pixel difference, 0–255)", color=ink, fontsize=8.5)
-    ax1.set_ylabel("share of house-A success lost at L1 (%)", color=ink, fontsize=8.5)
+    ax1.set_ylabel("drop in success rate at L1 (points)", color=ink, fontsize=8.5)
     ax1.set_ylim(-5, 105)
     ax1.set_xlim(0, max(x) * 1.15)
     # Six agents moved this from +0.60 to +0.80: the amount of change explains
@@ -92,18 +92,18 @@ def plot(mode: str) -> Path:
         colour = light if mode == "light" else dark
         for key, prev, cur, _name, marker in STEPS:
             xs = [shift[h][cur]["mean_abs_diff"] - shift[h][prev]["mean_abs_diff"] for h in houses]
-            ys = [costs[agent][h][key] for h in houses]
+            ys = [100 * costs[agent][h][key] for h in houses]
             ax2.scatter(xs, ys, s=110 if marker == "^" else 64, marker=marker, color=colour, edgecolor=surface,
                         linewidth=1.6, zorder=3)
             if agent == "ppo" and key == "L2noT->L2":
                 for h, xi, yi in zip(houses, xs, ys):
-                    if yi > 0.2:
-                        ax2.annotate(f"PPO, {h}: target swap", (xi, yi), xytext=(10, -2),
+                    if yi > 20:
+                        ax2.annotate(f"PPO, {h}: goal swap", (xi, yi), xytext=(10, -2),
                                      textcoords="offset points", fontsize=8, color=ink)
     ax2.axhline(0, color=muted, linewidth=1.0, zorder=1)
     ax2.set_xlabel("image change added by the step  (mean pixel difference)", color=ink, fontsize=8.5)
-    ax2.set_ylabel("success lost over the step", color=ink, fontsize=8.5)
-    ax2.set_title("(b) A change of ~1 to the target alone costs PPO the most\n"
+    ax2.set_ylabel("drop in success rate over the step (points)", color=ink, fontsize=8.5)
+    ax2.set_title("(b) A change of ~1 to the goal object alone costs PPO the most\n"
                   "each point = one house; mean over its 5 agents",
                   color=ink, fontsize=9.5, loc="left")
     handles = [Line2D([0], [0], linestyle="", marker="o", markersize=7,

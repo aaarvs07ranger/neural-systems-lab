@@ -45,7 +45,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (  # noqa: E402
-    LADDER_300K_REEVAL, LADDER_300K_RETRAINED, PROJECT_ROOT, SINGLE_CHANGE_300K, ladder_set,
+    AGENT_ORDER, LADDER_300K_REEVAL, LADDER_300K_RETRAINED, PROJECT_ROOT,
+    REORDERED_LADDER_300K, SINGLE_CHANGE_300K, ladder_set,
 )
 
 TRACKER_DIR = PROJECT_ROOT / "results" / "tracker"
@@ -71,6 +72,7 @@ ARCH_CLASS = {
     "ppo_dino": "model-free on-policy + FROZEN DINOv2 encoder (self-distillation, LVD-142M)",
     "dreamerv3": "reconstruction world model",
     "tdmpc2": "decoder-free latent world model + planner",
+    "tdmpc2_dino": "decoder-free latent world model + planner on a FROZEN DINOv2 encoder",
 }
 
 # Shared context of every run so far: the single L1 pair built by
@@ -100,6 +102,10 @@ RUNG_DESC = {
     "F_tgt": "ONLY the target's appearance changed",
     "F_objall": "ONLY object appearance changed, target included (no repaint)",
     "F_clut": "ONLY {clutter} distractor objects added",
+    "F_lightsky": "ONLY light colour/intensity and the skybox changed",
+    # Reordered cumulative ladder (2026-09-29): R1 = F_clut, R4 = L3.
+    "R2": "{clutter} distractor objects + light + skybox (reordered ladder rung 2)",
+    "R3": "R2 + every object's appearance, target included when swappable (reordered rung 3)",
 }
 # The rungs the factor pass walked, in the order it evaluated them.
 FACTOR_RUNGS = ("F_objall", "F_clut", "F_obj", "F_tgt", "F_mat", "F_light",
@@ -108,7 +114,17 @@ FACTOR_RUNGS = ("F_objall", "F_clut", "F_obj", "F_tgt", "F_mat", "F_light",
 FACTOR_JOBS = {"ppo": ("40345981", "89a6cb6"), "ppo_aug": ("40345982", "89a6cb6"),
                "ppo_jepa": ("40345983", "89a6cb6"), "ppo_mae": ("40345984", "89a6cb6"),
                "dreamerv3": ("40345985", "89a6cb6"), "tdmpc2": ("40345986", "89a6cb6"),
-               "ppo_dino": ("40386083", "d3ada1a")}
+               "ppo_dino": ("40386083", "d3ada1a"), "tdmpc2_dino": ("40920244", "cca7a65")}
+# The reordered-ladder pass, in the order it evaluated the houses. R1 is the
+# F_clut house and R4 the L3 house, so their codes are reused.
+REORDER_RUNGS = ("F_clut", "F_lightsky", "F_objall", "F_mat", "R2", "R3", "L3")
+# (job, repo state at submission). The seven were submitted together at
+# 2026-09-29 17:26 PDT from a checkout at 89a42d8 (recovered from the session
+# transcript); TD-MPC2+DINOv2 followed once it was trained.
+REORDER_JOBS = {"ppo": ("40865095", "89a42d8"), "ppo_aug": ("40865096", "89a42d8"),
+                "ppo_jepa": ("40865097", "89a42d8"), "ppo_mae": ("40865098", "89a42d8"),
+                "ppo_dino": ("40865099", "89a42d8"), "dreamerv3": ("40865100", "89a42d8"),
+                "tdmpc2": ("40865101", "89a42d8"), "tdmpc2_dino": ("40920245", "cca7a65")}
 BASE_RECIPE = {
     "ppo": "SB3 PPO defaults",
     "ppo_aug": "SB3 PPO defaults + photometric jitter (training only)",
@@ -117,6 +133,9 @@ BASE_RECIPE = {
     "ppo_dino": "SB3 PPO defaults on a frozen DINOv2 ViT-g/14 (facebook/dinov2-giant, fp16, 224px centre-crop size); only the MlpPolicy head trains",
     "dreamerv3": "DreamerV3 train_ratio=512",
     "tdmpc2": "TD-MPC2 upstream defaults",
+    "tdmpc2_dino": ("TD-MPC2 upstream defaults on a frozen DINOv2 ViT-g/14 (facebook/dinov2-giant, "
+                    "fp16, 224px centre crop, mean patch token, 1536-d, one frame) entering through "
+                    "upstream's 'state' MLP encoder"),
 }
 PROTOCOL_V2 = "protocol v2 (held-out start poses, pinned eval poses, static scene)"
 MIN_A = 0.5  # house-A success floor for relative-drop comparisons (rule fixed 2026-09-05)
@@ -135,7 +154,9 @@ GRID_JOBS = {
                     "ppo_jepa": ("40209743", "8a5b43c"),
                     "ppo_mae": ("40209748", "8a5b43c"),
                     # Added 2026-09-21, after the other six.
-                    "ppo_dino": ("40372463", "d3ada1a")},
+                    "ppo_dino": ("40372463", "d3ada1a"),
+                    # Added 2026-09-29, after the other seven.
+                    "tdmpc2_dino": ("40853946", "fa82467")},
         ("dreamerv3", "pair1", 0): ("39666403", "b95a196"),
         ("dreamerv3", "pair2", 0): ("39666403", "b95a196"),
         ("dreamerv3", "pair2", 3): ("39666403", "b95a196"),
@@ -187,10 +208,14 @@ def pair_context(pair: str, level: str) -> Dict[str, str]:
 
 def first_commit_date(path: Path) -> str:
     """Date the file first entered the repo: an upper bound on when the run finished."""
-    # --follow: result folders were renamed 2026-09-29; without it every file's
-    # "first added" date would become the rename commit's.
-    out = subprocess.run(["git", "log", "--follow", "--diff-filter=A", "--format=%ad",
-                          "--date=short", "--", str(path)],
+    # --follow: result folders were renamed 2026-09-30; without it every file's
+    # "first added" date would become the rename commit's. EXACT renames only
+    # (-M100%): plain --follow also accepts near-copies, and dated each eval-only
+    # re-measurement (added 2026-09-14) to the 79%-similar grid table it was
+    # re-measured from (added 2026-09-08). Caught by diffing a rebuild against
+    # the pre-rename tracker.
+    out = subprocess.run(["git", "-c", "diff.renames=true", "log", "--follow", "-M100%",
+                          "--diff-filter=A", "--format=%ad", "--date=short", "--", str(path)],
                          capture_output=True, text=True, cwd=PROJECT_ROOT).stdout.split()
     if not out:
         raise RuntimeError(f"{path} is not committed; commit results before ingesting them")
@@ -468,6 +493,49 @@ def ingest_factors(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def ingest_reordered(df: pd.DataFrame) -> pd.DataFrame:
+    """The reordered-ladder pass: one row per (agent, cell, rung).
+
+    Its own cohort for the same reasons as the single-change pass: different
+    houses (R2, R3, lighting & sky alone), and the shared houses (clutter,
+    object looks, walls, L3) are a third measurement of the same checkpoints.
+    Evaluation only; for 7 cells the saved model is a retrain (see RERUN_JOBS).
+    """
+    tree = PROJECT_ROOT / "results" / REORDERED_LADDER_300K
+    if not tree.exists():
+        return df
+    cells = sorted(tree.glob("*/*_seed*"))
+    n_agents = len({c.parent.name for c in cells})
+    if len(cells) != 25 * n_agents:
+        raise ValueError(f"results/{REORDERED_LADDER_300K}: {len(cells)} cells across "
+                         f"{n_agents} agents is not 25 each")
+    n = 0
+    for cell in cells:
+        baseline = cell.parent.name
+        pair, seed_s = cell.name.split("_seed")
+        seed = int(seed_s)
+        summary = cell / f"{baseline}_transfer_summary.csv"
+        job, commit = REORDER_JOBS[baseline]
+        recipe = (f"{BASE_RECIPE[baseline]}; {PROTOCOL_V2}; 300k env steps; "
+                  "EVALUATION ONLY -- the grid's trained model, re-evaluated along the "
+                  "reordered ladder")
+        retrain = (baseline, pair, seed) in RERUN_JOBS
+        for level in REORDER_RUNGS:
+            row = make_row(summary_csv=summary, baseline=baseline, seed=seed,
+                           cohort="reorder_300k", date=first_commit_date(summary),
+                           git_commit=commit, slurm_job=job, recipe=recipe,
+                           recipe_tag="v2-300k-reorder", train_steps=300_000,
+                           results_path=str(cell.relative_to(PROJECT_ROOT)),
+                           **pair_context(pair, level))
+            note = "reordered-ladder pass: all eight houses measured for this agent in ONE evaluation"
+            if retrain:
+                note += "; the saved model is the RETRAIN (the original's model was lost)"
+            row["notes"] = _competency_note(row, note)
+            df = upsert(df, row); n += 1
+    print(f"  reorder_300k: {n} (agent, rung) rows from {len(cells)} cells")
+    return df
+
+
 def ingest_reruns(df: pd.DataFrame) -> pd.DataFrame:
     """Retrained agents (saved model was gone). Never the headline; all five rungs."""
     n = 0
@@ -509,33 +577,40 @@ def write_houses() -> None:
     import json
     shift = {(r["pair"], r["level"]): r for r in
              json.loads((PROJECT_ROOT / "results" / "tables" / "visual_shift.json").read_text())}
+    rgb_path = PROJECT_ROOT / "results" / "tables" / "rgb_shift.json"
+    rgb = ({(r["pair"], r["level"]): r for r in json.loads(rgb_path.read_text())}
+           if rgb_path.exists() else {})
     rows = []
     for i in range(5):
         pair = f"pair{i}"
         d = PROJECT_ROOT / "data" / "pairs" / pair
         ver = json.loads((d / "verification.json").read_text())
         idx = {p["pair_id"]: p for p in json.loads((PROJECT_ROOT / "data" / "pairs_index.json").read_text())["pairs"]}[pair]
-        for level in ("L1", "L2noT", "L2", "L3") + FACTOR_RUNGS[:7]:
+        for level in ("L1", "L2noT", "L2", "L3") + FACTOR_RUNGS[:7] + ("F_lightsky", "R2", "R3"):
             v = ver["levels"].get(level)
             if v is None and level.startswith("F_"):
                 continue          # pair2 has no F_tgt house at all
-            # Image change was measured for the ladder rungs only (one capture
-            # pass, before the single-change houses existed). Recorded as
-            # missing rather than guessed.
+            # The first image-change capture (visual_shift.json) covers the
+            # ladder rungs only; recorded as missing elsewhere rather than
+            # guessed. The colour-shift columns (rgb_*) cover every house.
             sh = shift.get((pair, level), {"mean_abs_diff": "", "frac_pixels_changed": "",
                                            "hist_l1": ""})
+            # Per-channel colour shift (measure_rgb_shift.py), every changed house.
+            c = rgb.get((pair, level), {})
             rows.append(dict(
                 house_pair=pair, shift_level=level, house_index=idx["house_index"],
                 target=idx["target_object_type"],
                 target_swappable=bool(json.loads((d / "safe_assets.json").read_text()).get("target_swappable")),
                 reachable_cells=ver["reference"]["n_reachable"],
                 clutter_kept=(json.loads((d / "l3_prune.json").read_text())["n_kept"]
-                              if level in ("L3", "F_clut") else 0),
+                              if level in ("L3", "F_clut", "R2", "R3") else 0),
                 gate_C1_C3_passed=(v["passed"] if v else "not recorded in verification.json"),
                 max_shortest_path_delta_m=(v["max_shortest_path_delta"] if v else ""),
                 image_mean_pixel_diff=sh["mean_abs_diff"],
                 image_frac_pixels_changed=sh["frac_pixels_changed"],
                 image_hist_l1=sh["hist_l1"],
+                rgb_w1_red=c.get("w1_r", ""), rgb_w1_green=c.get("w1_g", ""),
+                rgb_w1_blue=c.get("w1_b", ""), rgb_mean_pixel_diff=c.get("mean_abs_diff", ""),
             ))
     out = TRACKER_DIR / "houses.csv"
     pd.DataFrame(rows).to_csv(out, index=False)
@@ -648,6 +723,7 @@ def cmd_rebuild(_: argparse.Namespace) -> None:
     df = ingest_ladder(df, 300_000)
     df = ingest_reruns(df)
     df = ingest_factors(df)
+    df = ingest_reordered(df)
     save_runs(df)
     write_houses()
 
@@ -739,7 +815,7 @@ def cmd_render(_: argparse.Namespace) -> None:
             "rel. SPL drop": _pm_pct(g["relative_SPL_drop"]),
             "ep-len ratio (B/A)": _pm(g["episode_length_ratio"], "{:.1f}"),
         })
-    order = {"ppo": 0, "ppo_aug": 1, "dreamerv3": 2, "tdmpc2": 3}
+    order = {b: i for i, b in enumerate(AGENT_ORDER)}
     agg_rows.sort(key=lambda r: order.get(r["baseline"], 9))
     lines += [pd.DataFrame(agg_rows).to_markdown(index=False), ""]
 
@@ -749,8 +825,10 @@ def cmd_render(_: argparse.Namespace) -> None:
         if g.empty:
             continue
         lines += [f"## {title}", "",
-                  "One row per trained agent per rung. `success` columns use every agent; "
-                  f"`share of A lost` uses agents with house-A success ≥ {MIN_A} (count shown). "
+                  "One row per trained agent per rung. `success` columns use every agent; the "
+                  f"drop columns use agents with house-A success ≥ {MIN_A} (count shown): drop = "
+                  "house-A success minus success at the rung, in percentage points, and the "
+                  "relative drop divides it by house-A success. "
                   "L2noT is deliberately NOT pooled here: for 7 cells it was measured on a retrained "
                   "agent (`rerun_300k`), so an L2noT row would average different agents than the rows "
                   "beside it. Its rows are in `runs.csv`; its analysis, each agent against itself, is "
@@ -761,11 +839,32 @@ def cmd_render(_: argparse.Namespace) -> None:
             agg.append({"agent": b_, "rung": lvl, "agents": len(x),
                         "A success": f"{x['A_success'].mean():.3f}",
                         "rung success": f"{x['B_success'].mean():.3f}",
-                        "share of A lost": f"{100 * ok['relative_success_drop'].mean():.1f}% (n={len(ok)})",
-                        "SPL share lost": f"{100 * ok['relative_SPL_drop'].mean():.1f}%"})
+                        "drop (points)": f"{100 * (ok['A_success'] - ok['B_success']).mean():.1f} (n={len(ok)})",
+                        "relative drop": f"{100 * ok['relative_success_drop'].mean():.1f}%",
+                        "SPL drop (points)": f"{100 * (ok['A_SPL'] - ok['B_SPL']).mean():.1f}"})
         rung_order = {"L1": 0, "L2noT": 1, "L2": 2, "L3": 3}
         agg.sort(key=lambda r: (order.get(r["agent"], 9), rung_order.get(r["rung"], 9)))
         lines += [pd.DataFrame(agg).to_markdown(index=False), ""]
+
+    for cohort, title, rungs in (
+            ("factor_300k", "Single-change pass (`factor_300k`) — one change at a time",
+             ("F_mat", "F_light", "F_sky", "F_obj", "F_tgt", "F_objall", "F_clut")),
+            ("reorder_300k", "Reordered-ladder pass (`reorder_300k`) — cumulative, least to most "
+             "damaging", ("F_clut", "R2", "R3", "L3", "F_lightsky"))):
+        g = df[df["cohort"] == cohort]
+        if g.empty:
+            continue
+        ok = g[g["A_success"] >= MIN_A].copy()
+        ok["drop_pts"] = 100 * (ok["A_success"] - ok["B_success"])
+        view_f = ok.pivot_table(index="baseline", columns="shift_level", values="drop_pts")
+        view_f = view_f.reindex([b for b in AGENT_ORDER if b in view_f.index])
+        view_f = view_f[[r for r in rungs if r in view_f.columns]]
+        lines += [f"## {title}", "",
+                  "Mean drop in success rate from house A, in percentage points, agents with "
+                  f"house-A success ≥ {MIN_A}. Evaluation only; for 7 cells the saved model is "
+                  "a retrain. In the reordered pass F_clut is R1 and L3 is R4; F_lightsky is "
+                  "lighting & sky alone.", "",
+                  view_f.round(1).to_markdown(), ""]
 
     rr = df[df["cohort"] == "rerun_300k"]
     if not rr.empty:
@@ -784,13 +883,14 @@ def cmd_render(_: argparse.Namespace) -> None:
 
     lines += ["## All runs", ""]
     view = df.copy()
+    view["drop_points"] = (100 * (view["A_success"] - view["B_success"])).map("{:.0f}".format)
     for col in ("A_success", "B_success", "A_SPL", "B_SPL"):
         view[col] = view[col].map("{:.3f}".format)
     for col in ("relative_success_drop", "relative_SPL_drop"):
         view[col] = (view[col] * 100).map("{:.1f}%".format)
     view["episode_length_ratio"] = view["episode_length_ratio"].map("{:.1f}x".format)
     cols = ["experiment_id", "date", "cohort", "seed", "A_success", "B_success",
-            "relative_success_drop", "A_SPL", "B_SPL", "relative_SPL_drop",
+            "drop_points", "relative_success_drop", "A_SPL", "B_SPL", "relative_SPL_drop",
             "episode_length_ratio", "status", "git_commit", "slurm_job"]
     lines += [view[cols].to_markdown(index=False), "",
               "_Full provenance (recipes, env/object parameters, notes, result "
