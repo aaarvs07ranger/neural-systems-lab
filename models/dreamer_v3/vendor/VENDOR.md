@@ -24,6 +24,15 @@
 4. **`dreamer.py`: removed `os.environ["MUJOCO_GL"]` and `sys.path.append`
    lines** — MuJoCo is unused and the path hack is superseded by packaging.
 
+5. **`models.py` (`WorldModel.preprocess`) and `tools.py` (`simulate`): the
+   `image` key is optional** (added 2026-10-03 for `dreamerv3_dino`). Upstream
+   indexes `obs["image"]` unconditionally in two places (the /255 rescale and
+   the episode video kept for eval logging), so an observation carrying only a
+   vector feature would raise `KeyError`. Both are now skipped when no image is
+   present; with an image, every line runs exactly as before. Vector inputs
+   themselves were already upstream's: `encoder/decoder.mlp_keys` route them to
+   the MLP encoder/decoder, as in its proprioceptive configs.
+
 No behavioral/algorithmic changes. MPS compatibility is handled purely via
 config (`device: mps`, `compile: False`, `precision: 32`,
 `video_pred_log: False`) in `config.py:DreamerV3Config` + `../adapter.py`,

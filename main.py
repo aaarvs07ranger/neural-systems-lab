@@ -11,6 +11,8 @@ Baselines:
     ppo_aug    PPO + train-time photometric jitter (augmentation baseline)
     dreamerv3  vendored NM512 DreamerV3 world model
     tdmpc2     vendored nicklashansen/tdmpc2 world model
+    ppo_jepa, ppo_mae, ppo_dino, tdmpc2_dino, dreamerv3_dino
+               the same agents on a frozen pretrained encoder (config.py)
 
 Examples:
     python main.py --smoke                 # fast end-to-end pipeline check
@@ -51,6 +53,7 @@ from config import (  # noqa: E402
     resolve_pair,
     LOGS_DIR,
     DreamerV3Config,
+    DreamerV3DinoConfig,
     PPOAugConfig,
     PPOJepaConfig,
     PPODinoConfig,
@@ -60,6 +63,7 @@ from config import (  # noqa: E402
     SmokePPOMaeConfig,
     PPOConfig,
     SmokeDreamerV3Config,
+    SmokeDreamerV3DinoConfig,
     SmokePPOAugConfig,
     SmokePPOConfig,
     SmokeTDMPC2Config,
@@ -72,7 +76,7 @@ from config import (  # noqa: E402
 logger = logging.getLogger("main")
 
 IMPLEMENTED_BASELINES = ("ppo", "ppo_aug", "ppo_jepa", "ppo_mae", "ppo_dino",
-                         "dreamerv3", "tdmpc2", "tdmpc2_dino")
+                         "dreamerv3", "tdmpc2", "tdmpc2_dino", "dreamerv3_dino")
 PLANNED_BASELINES = ()
 
 # (baseline, smoke) -> config dataclass
@@ -89,6 +93,8 @@ CONFIG_CLASSES = {
     ("ppo_aug", True): SmokePPOAugConfig,
     ("dreamerv3", False): DreamerV3Config,
     ("dreamerv3", True): SmokeDreamerV3Config,
+    ("dreamerv3_dino", False): DreamerV3DinoConfig,
+    ("dreamerv3_dino", True): SmokeDreamerV3DinoConfig,
     ("tdmpc2", False): TDMPC2Config,
     ("tdmpc2", True): SmokeTDMPC2Config,
     ("tdmpc2_dino", False): TDMPC2DinoConfig,
@@ -115,7 +121,7 @@ def stage_train(baseline: str, cfg, pair_id: str = None) -> None:
         from scripts.train_ppo import train
 
         train(cfg, pair)
-    elif baseline == "dreamerv3":
+    elif baseline in ("dreamerv3", "dreamerv3_dino"):
         from models.dreamer_v3.adapter import DreamerV3Adapter
 
         DreamerV3Adapter(cfg).train(

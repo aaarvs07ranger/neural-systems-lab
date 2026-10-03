@@ -16,6 +16,12 @@ style environment:
 Frames are downscaled from the THOR render resolution (128x128) to Dreamer's
 native 64x64 so the world model matches the published architecture and stays
 tractable on the M4's MPS backend.
+
+When a frozen encoder wraps the env (``dreamerv3_dino``), the env already emits
+a 1-D feature vector. It goes to a ``feature`` key, float32 and untouched, and
+there is no ``image`` key: the world model's MLP encoder takes the feature
+(``mlp_keys``) and its CNN is never built. Which kind applies is read off the
+wrapped env's own observation space, so nothing has to be configured twice.
 """
 from __future__ import annotations
 
@@ -29,6 +35,25 @@ from gymnasium import spaces
 from envs.procthor_env import ProcTHORObjectNavEnv
 
 
+def obs_spaces(kind: str, size: int) -> spaces.Dict:
+    """DreamerV3's observation dict. kind 'image': a size x size RGB frame;
+    kind 'feature': a frozen encoder's size-dimensional vector."""
+    if kind == "image":
+        view = spaces.Box(0, 255, (size, size, 3), dtype=np.uint8)
+    elif kind == "feature":
+        view = spaces.Box(-np.inf, np.inf, (size,), dtype=np.float32)
+    else:
+        raise ValueError(f"observation kind {kind!r} (expected 'image' or 'feature')")
+    return spaces.Dict(
+        {
+            kind: view,
+            "is_first": spaces.Box(0, 1, (), dtype=bool),
+            "is_last": spaces.Box(0, 1, (), dtype=bool),
+            "is_terminal": spaces.Box(0, 1, (), dtype=bool),
+        }
+    )
+
+
 class DreamerTHOREnv:
     """Old-gym dict-observation adapter around :class:`ProcTHORObjectNavEnv`."""
 
@@ -40,15 +65,10 @@ class DreamerTHOREnv:
         self._pending_seed: int | None = int(seed)
         self.id = self._new_id()
 
-        img = spaces.Box(0, 255, (self._size, self._size, 3), dtype=np.uint8)
-        self.observation_space = spaces.Dict(
-            {
-                "image": img,
-                "is_first": spaces.Box(0, 1, (), dtype=bool),
-                "is_last": spaces.Box(0, 1, (), dtype=bool),
-                "is_terminal": spaces.Box(0, 1, (), dtype=bool),
-            }
-        )
+        shape = tuple(env.observation_space.shape)
+        self.obs_kind = "feature" if len(shape) == 1 else "image"
+        self.obs_size = int(shape[0]) if self.obs_kind == "feature" else self._size
+        self.observation_space = obs_spaces(self.obs_kind, self.obs_size)
         # One-hot action box, as produced by Dreamer's onehot actor head.
         n = int(env.action_space.n)
         self.action_space = spaces.Box(0.0, 1.0, (n,), dtype=np.float32)
@@ -62,6 +82,13 @@ class DreamerTHOREnv:
 
     def _obs(self, frame: np.ndarray, is_first: bool, is_last: bool,
              is_terminal: bool) -> Dict[str, Any]:
+        if self.obs_kind == "feature":
+            return {
+                "feature": np.asarray(frame, dtype=np.float32),
+                "is_first": is_first,
+                "is_last": is_last,
+                "is_terminal": is_terminal,
+            }
         import cv2  # installed as an ai2thor dependency
 
         if frame.shape[0] != self._size or frame.shape[1] != self._size:

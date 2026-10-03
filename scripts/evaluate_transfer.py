@@ -223,19 +223,17 @@ def load_frozen_model(baseline: str, cfg: Any) -> Any:
                 f"{baseline} --stage train` first."
             )
         return PPO.load(str(final_model_path(baseline)), device=get_device())
-    if baseline == "dreamerv3":
-        from models.dreamer_v3.adapter import (
-            FINAL_MODEL_PATH as DV3_FINAL_MODEL_PATH,
-            DreamerV3Adapter,
-        )
+    if baseline in ("dreamerv3", "dreamerv3_dino"):
+        from models.dreamer_v3.adapter import DreamerV3Adapter, run_paths
 
-        if not DV3_FINAL_MODEL_PATH.exists():
+        final_path = run_paths(baseline)[2]
+        if not final_path.exists():
             raise FileNotFoundError(
-                f"{DV3_FINAL_MODEL_PATH} not found — run "
-                "`python main.py --baseline dreamerv3 --stage train` first."
+                f"{final_path} not found — run "
+                f"`python main.py --baseline {baseline} --stage train` first."
             )
         adapter = DreamerV3Adapter(cfg)
-        adapter.load(DV3_FINAL_MODEL_PATH)
+        adapter.load(final_path)
         return adapter
     if baseline in ("tdmpc2", "tdmpc2_dino"):
         from models.td_mpc2.adapter import TDMPC2Adapter, run_paths
@@ -381,7 +379,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", choices=("ppo", "ppo_aug", "ppo_jepa", "ppo_mae",
                                                "ppo_dino", "dreamerv3", "tdmpc2",
-                                               "tdmpc2_dino"),
+                                               "tdmpc2_dino", "dreamerv3_dino"),
                         default="ppo")
     parser.add_argument("--episodes", type=int, default=None,
                         help="override number of eval episodes per variant")
@@ -397,11 +395,13 @@ def main() -> None:
 
     from config import (
         DreamerV3Config,
+        DreamerV3DinoConfig,
         PPOAugConfig,
         PPOJepaConfig,
         PPODinoConfig,
         PPOMaeConfig,
         SmokeDreamerV3Config,
+        SmokeDreamerV3DinoConfig,
         SmokePPOAugConfig,
         SmokePPOJepaConfig,
         SmokePPODinoConfig,
@@ -426,6 +426,8 @@ def main() -> None:
         ("ppo_dino", True): SmokePPODinoConfig,
         ("dreamerv3", False): DreamerV3Config,
         ("dreamerv3", True): SmokeDreamerV3Config,
+        ("dreamerv3_dino", False): DreamerV3DinoConfig,
+        ("dreamerv3_dino", True): SmokeDreamerV3DinoConfig,
         ("tdmpc2", False): TDMPC2Config,
         ("tdmpc2", True): SmokeTDMPC2Config,
         ("tdmpc2_dino", False): TDMPC2DinoConfig,

@@ -179,7 +179,10 @@ class WorldModel(nn.Module):
             k: torch.tensor(v, device=self._config.device, dtype=torch.float32)
             for k, v in obs.items()
         }
-        obs["image"] = obs["image"] / 255.0
+        # Local patch #5 (VENDOR.md): a vector-only observation (a frozen
+        # encoder's feature) has no image. Pixel observations are unchanged.
+        if "image" in obs:
+            obs["image"] = obs["image"] / 255.0
         if "discount" in obs:
             obs["discount"] *= self._config.discount
             # (batch_size, batch_length) -> (batch_size, batch_length, 1)

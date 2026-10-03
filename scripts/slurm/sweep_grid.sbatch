@@ -52,7 +52,7 @@ conda activate "${GSCRATCH_ROOT}/conda-envs/nsl"
 # reproducibility). It lives in a venv layered on top with --system-site-packages
 # (envs/frozen_encoder.py), so it is loaded only for these two baselines.
 if [[ "${BASELINE}" == ppo_jepa || "${BASELINE}" == ppo_mae || "${BASELINE}" == ppo_dino \
-      || "${BASELINE}" == tdmpc2_dino ]]; then
+      || "${BASELINE}" == tdmpc2_dino || "${BASELINE}" == dreamerv3_dino ]]; then
     source "${GSCRATCH_ROOT}/venvs/jepa/bin/activate"
     export HF_HOME="${GSCRATCH_ROOT}/models/hf"
     export HF_HUB_OFFLINE=1   # compute nodes have no internet; encoders are pre-downloaded
@@ -142,13 +142,15 @@ if [ -d "${DEST}" ] && [ -n "$(ls -A "${DEST}" 2>/dev/null)" ]; then
     # give up and leave the bytes rather than lose the run.
     for attempt in 1 2 3; do
         rm -rf "${NSL_RESULTS_DIR}/logs/tdmpc2" "${NSL_RESULTS_DIR}/logs/tdmpc2_dino" \
-               "${NSL_RESULTS_DIR}/logs/dreamerv3" 2>/dev/null && break
+               "${NSL_RESULTS_DIR}/logs/dreamerv3" "${NSL_RESULTS_DIR}/logs/dreamerv3_dino" \
+               2>/dev/null && break
         sleep 5
     done
     find "${NSL_RESULTS_DIR}/checkpoints" -name '*_steps.zip' -delete 2>/dev/null || true
     find "${NSL_RESULTS_DIR}/checkpoints" -name 'latest.pt' -delete 2>/dev/null || true
     if [ -d "${NSL_RESULTS_DIR}/logs/dreamerv3" ] || [ -d "${NSL_RESULTS_DIR}/logs/tdmpc2" ] \
-       || [ -d "${NSL_RESULTS_DIR}/logs/tdmpc2_dino" ]; then
+       || [ -d "${NSL_RESULTS_DIR}/logs/tdmpc2_dino" ] \
+       || [ -d "${NSL_RESULTS_DIR}/logs/dreamerv3_dino" ]; then
         echo "[slurm] WARNING: replay for ${CELL} could not be removed; leaving it." \
              "The run itself SUCCEEDED -- do not treat this as a failed cell."
     else

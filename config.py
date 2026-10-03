@@ -419,6 +419,30 @@ class DreamerV3Config:
     log_every: int = 2_000           # env steps between TensorBoard writes
     save_every: int = 10_000         # env steps between latest.pt checkpoints
 
+    # Identity + optional frozen encoder (see DreamerV3DinoConfig). Empty
+    # frozen_encoder = the pixel recipe above, unchanged.
+    baseline_name: str = "dreamerv3"
+    frozen_encoder: str = ""
+    encoder_dtype: str = "fp16"
+
+
+@dataclass(frozen=True)
+class DreamerV3DinoConfig(DreamerV3Config):
+    """DreamerV3 whose image input is replaced by a frozen DINOv2 feature.
+
+    Added 2026-10-03, the DreamerV3 counterpart of TDMPC2DinoConfig: the same
+    frozen encoder, single-frame feature and preprocessing as PPO+DINOv2 and
+    TD-MPC2+DINOv2. The feature enters through DreamerV3's own MLP encoder
+    (upstream's recipe for vector observations), so its decoder reconstructs the
+    DINOv2 feature rather than the image. Every other hyperparameter is the
+    DreamerV3 recipe above; the grid passes --train-ratio 512 exactly as it does
+    for `dreamerv3`, so the only change is what the world model sees.
+    """
+
+    baseline_name: str = "dreamerv3_dino"
+    frozen_encoder: str = "facebook/dinov2-giant"
+    encoder_dtype: str = "fp16"
+
 
 @dataclass(frozen=True)
 class SmokeDreamerV3Config(DreamerV3Config):
@@ -432,6 +456,13 @@ class SmokeDreamerV3Config(DreamerV3Config):
     eval_episodes: int = 3
     log_every: int = 200
     save_every: int = 250
+
+
+@dataclass(frozen=True)
+class SmokeDreamerV3DinoConfig(SmokeDreamerV3Config):
+    baseline_name: str = "dreamerv3_dino"
+    frozen_encoder: str = "facebook/dinov2-giant"
+    encoder_dtype: str = "fp16"
 
 
 # ---------------------------------------------------------------------------
